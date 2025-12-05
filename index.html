@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Three.js Upgraded Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    #score {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 26px;
+      font-family: Arial;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+<div id="score">Score: 0</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
+
+<script>
+/* ------------------------------------------------------------------
+   SCENE + CAMERA + RENDERER
+------------------------------------------------------------------ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111111);
+
+const camera = new THREE.PerspectiveCamera(
+  70,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+camera.position.set(0, 5, 15);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+/* ------------------------------------------------------------------
+   FLOOR
+------------------------------------------------------------------ */
+const floorGeo = new THREE.PlaneGeometry(20, 40);
+const floorMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+/* ------------------------------------------------------------------
+   LIGHTING
+------------------------------------------------------------------ */
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const spot = new THREE.SpotLight(0xffffff, 1.2);
+spot.position.set(0, 15, 10);
+spot.castShadow = true;
+scene.add(spot);
+
+/* ------------------------------------------------------------------
+   PLAYER (3D cylinder)
+------------------------------------------------------------------ */
+const playerGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.5, 32);
+const playerMat = new THREE.MeshPhongMaterial({ color: 0x00ffcc });
+const player = new THREE.Mesh(playerGeo, playerMat);
+player.castShadow = true;
+player.position.set(0, 1, 0);
+scene.add(player);
+
+let playerSpeed = 0;
+const MOVE_SPEED = 0.1;
+
+/* ------------------------------------------------------------------
+   OBSTACLES (3D boxes)
+------------------------------------------------------------------ */
+let obstacles = [];
+function spawnObstacle() {
+  const geo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+  const mat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
+  const obs = new THREE.Mesh(geo, mat);
+
+  obs.castShadow = true;
+  obs.position.x = Math.random() * 10 - 5;
+  obs.position.y = 1;
+  obs.position.z = -15;
+
+  scene.add(obs);
+  obstacles.push(obs);
+}
+setInterval(spawnObstacle, 800);
+
+/* ------------------------------------------------------------------
+   INPUT HANDLING (smooth movement)
+------------------------------------------------------------------ */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") playerSpeed = -MOVE_SPEED;
+  if (e.key === "ArrowRight") playerSpeed = MOVE_SPEED;
+});
+document.addEventListener("keyup", () => {
+  playerSpeed = 0;
+});
+
+/* ------------------------------------------------------------------
+   COLLISION CHECK
+------------------------------------------------------------------ */
+function collides(a, b) {
+  return (
+    Math.abs(a.position.x - b.position.x) < 1 &&
+    Math.abs(a.position.z - b.position.z) < 1
+  );
+}
+
+/* ------------------------------------------------------------------
+   GAME LOOP
+------------------------------------------------------------------ */
+let score = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Move player smoothly
+  player.position.x += playerSpeed;
+
+  // Limit movement area
+  player.position.x = Math.max(-5, Math.min(5, player.position.x));
+
+  // Move obstacles
+  obstacles.forEach((obs, i) => {
+    obs.position.z += 0.12;
+
+    // Check collision
+    if (collides(player, obs)) {
+      alert("GAME OVER! Score: " + score);
+      location.reload();
+    }
+
+    // Remove passed obstacle
+    if (obs.position.z > 10) {
+      scene.remove(obs);
+      obstacles.splice(i, 1);
+      score++;
+      document.getElementById("score").innerText = "Score: " + score;
+    }
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+/* ------------------------------------------------------------------
+   RESIZE
+------------------------------------------------------------------ */
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
