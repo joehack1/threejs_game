@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Third-Person Explorer - TPP Game</title>
+  <title>3D Explorer - Animated Character</title>
   <style>
     body { 
       margin: 0; 
@@ -88,52 +88,80 @@
       z-index: 1000;
       border: 3px solid #4CAF50;
     }
-    #miniMap {
+    #crosshair {
       position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 200px;
-      height: 200px;
-      background: rgba(0,0,0,0.6);
-      border: 2px solid white;
-      border-radius: 10px;
-      z-index: 100;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      z-index: 50;
     }
-    .hud-icon {
-      margin-right: 8px;
+    .crosshair-dot {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: #00ff00;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .crosshair-line {
+      position: absolute;
+      background: #00ff00;
+    }
+    .crosshair-line.vertical {
+      width: 2px;
+      height: 15px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .crosshair-line.horizontal {
+      width: 15px;
+      height: 2px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
     }
   </style>
 </head>
 <body>
 <div id="ui">
-  <h2>👤 Third-Person Explorer</h2>
-  <div><span class="hud-icon">❤️</span> Health: <span id="health">100</span></div>
+  <h2>🏃 3D Explorer</h2>
+  <div>❤️ Health: <span id="health">100</span></div>
   <div id="healthBar"><div id="healthFill"></div></div>
-  <div><span class="hud-icon">⚡</span> Stamina: <span id="stamina">100</span></div>
+  <div>⚡ Stamina: <span id="stamina">100</span></div>
   <div id="staminaBar"><div id="staminaFill"></div></div>
-  <div><span class="hud-icon">⭐</span> Score: <span id="score">0</span></div>
-  <div><span class="hud-icon">💰</span> Coins: <span id="coins">0</span>/25</div>
-  <div><span class="hud-icon">📍</span> Position: <span id="position">0, 0, 0</span></div>
+  <div>⭐ Score: <span id="score">0</span></div>
+  <div>💰 Coins: <span id="coins">0</span>/30</div>
+  <div>📍 Position: <span id="position">0, 0, 0</span></div>
+  <div>🎯 Mission: Explore and collect coins!</div>
 </div>
-
-<div id="miniMap"></div>
 
 <div id="controls">
   <h3>Controls</h3>
-  <div>WASD / Arrow Keys - Move Character</div>
-  <div>Mouse Move - Rotate Camera</div>
-  <div>Mouse Wheel - Zoom In/Out</div>
+  <div>WASD - Move</div>
+  <div>Mouse - Look around</div>
   <div>Space - Jump</div>
   <div>Shift - Sprint (uses stamina)</div>
-  <div>Q/E - Quick Rotate Camera</div>
-  <div>F - Toggle Flashlight</div>
-  <div>R - Reset Camera</div>
+  <div>Left Click - Interact</div>
+  <div>E - Pick up items</div>
+  <div>F - Toggle flashlight</div>
+</div>
+
+<div id="crosshair">
+  <div class="crosshair-dot"></div>
+  <div class="crosshair-line vertical"></div>
+  <div class="crosshair-line horizontal"></div>
 </div>
 
 <div id="gameOver">
   <h1>GAME OVER</h1>
   <div>Final Score: <span id="finalScore">0</span></div>
-  <div>Coins Collected: <span id="finalCoins">0</span>/25</div>
+  <div>Coins Collected: <span id="finalCoins">0</span>/30</div>
   <button onclick="restartGame()">Play Again</button>
 </div>
 
@@ -145,7 +173,8 @@
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x87CEEB, 50, 300);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 10, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -154,16 +183,14 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 /* ------------------------------------------------------------------
-   THIRD-PERSON CHARACTER WITH ANIMATED LEGS
+   ANIMATED CHARACTER WITH LEGS
 ------------------------------------------------------------------ */
 const player = {
   mesh: null,
-  group: null,  // Main container for character
-  speed: 4,
-  runSpeed: 7,
+  speed: 3.5,
+  runSpeed: 6.5,
   jumpForce: 8,
   velocity: new THREE.Vector3(0, 0, 0),
-  rotation: 0,
   canJump: true,
   health: 100,
   stamina: 100,
@@ -171,38 +198,30 @@ const player = {
   score: 0,
   isAlive: true,
   isRunning: false,
-  isMoving: false,
   animation: {
     walkCycle: 0,
-    legSwing: Math.PI / 5,
-    armSwing: Math.PI / 6,
+    legSwing: Math.PI / 6,
+    armSwing: Math.PI / 4,
     bobAmount: 0.1
   },
   bodyParts: {}
 };
 
-function createThirdPersonCharacter() {
+function createAnimatedCharacter() {
   const character = new THREE.Group();
-  player.group = character;
   
   // Body (torso)
-  const torsoGeo = new THREE.BoxGeometry(0.8, 1.5, 0.5);
-  const torsoMat = new THREE.MeshPhongMaterial({ 
-    color: 0x2196F3,
-    shininess: 30
-  });
+  const torsoGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
+  const torsoMat = new THREE.MeshPhongMaterial({ color: 0x4CAF50 });
   const torso = new THREE.Mesh(torsoGeo, torsoMat);
   torso.castShadow = true;
-  torso.position.y = 1.75;
+  torso.position.y = 1.8;
   character.add(torso);
   player.bodyParts.torso = torso;
   
   // Head
-  const headGeo = new THREE.SphereGeometry(0.45, 16, 16);
-  const headMat = new THREE.MeshPhongMaterial({ 
-    color: 0xFFD700,
-    shininess: 100
-  });
+  const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+  const headMat = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
   const head = new THREE.Mesh(headGeo, headMat);
   head.castShadow = true;
   head.position.y = 2.8;
@@ -210,206 +229,138 @@ function createThirdPersonCharacter() {
   player.bodyParts.head = head;
   
   // Arms
-  const armGeo = new THREE.BoxGeometry(0.2, 1, 0.2);
+  const armGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
   const armMat = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
   
   // Left arm
   const leftArm = new THREE.Mesh(armGeo, armMat);
   leftArm.castShadow = true;
-  leftArm.position.set(-0.5, 2.1, 0);
+  leftArm.position.set(-0.5, 2, 0);
   character.add(leftArm);
   player.bodyParts.leftArm = leftArm;
-  player.bodyParts.leftArmBase = leftArm.position.clone();
   
   // Right arm
   const rightArm = new THREE.Mesh(armGeo, armMat);
   rightArm.castShadow = true;
-  rightArm.position.set(0.5, 2.1, 0);
+  rightArm.position.set(0.5, 2, 0);
   character.add(rightArm);
   player.bodyParts.rightArm = rightArm;
-  player.bodyParts.rightArmBase = rightArm.position.clone();
   
   // Legs (thighs)
-  const thighGeo = new THREE.BoxGeometry(0.35, 1, 0.35);
-  const thighMat = new THREE.MeshPhongMaterial({ color: 0x1565C0 });
+  const thighGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
+  const thighMat = new THREE.MeshPhongMaterial({ color: 0x2E7D32 });
   
   // Left thigh
   const leftThigh = new THREE.Mesh(thighGeo, thighMat);
   leftThigh.castShadow = true;
-  leftThigh.position.set(-0.2, 1, 0);
+  leftThigh.position.set(-0.2, 1.1, 0);
   character.add(leftThigh);
   player.bodyParts.leftThigh = leftThigh;
-  player.bodyParts.leftThighBase = leftThigh.position.clone();
   
   // Right thigh
   const rightThigh = new THREE.Mesh(thighGeo, thighMat);
   rightThigh.castShadow = true;
-  rightThigh.position.set(0.2, 1, 0);
+  rightThigh.position.set(0.2, 1.1, 0);
   character.add(rightThigh);
   player.bodyParts.rightThigh = rightThigh;
-  player.bodyParts.rightThighBase = rightThigh.position.clone();
   
   // Lower legs
-  const calfGeo = new THREE.BoxGeometry(0.3, 1, 0.3);
-  const calfMat = new THREE.MeshPhongMaterial({ color: 0x0D47A1 });
+  const calfGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);
+  const calfMat = new THREE.MeshPhongMaterial({ color: 0x1B5E20 });
   
   // Left calf
   const leftCalf = new THREE.Mesh(calfGeo, calfMat);
   leftCalf.castShadow = true;
-  leftCalf.position.set(-0.2, 0.4, 0);
+  leftCalf.position.set(-0.2, 0.5, 0);
   character.add(leftCalf);
   player.bodyParts.leftCalf = leftCalf;
   
   // Right calf
   const rightCalf = new THREE.Mesh(calfGeo, calfMat);
   rightCalf.castShadow = true;
-  rightCalf.position.set(0.2, 0.4, 0);
+  rightCalf.position.set(0.2, 0.5, 0);
   character.add(rightCalf);
   player.bodyParts.rightCalf = rightCalf;
   
   // Feet
-  const footGeo = new THREE.BoxGeometry(0.35, 0.2, 0.6);
+  const footGeo = new THREE.BoxGeometry(0.3, 0.15, 0.5);
   const footMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
   
   // Left foot
   const leftFoot = new THREE.Mesh(footGeo, footMat);
   leftFoot.castShadow = true;
-  leftFoot.position.set(-0.2, -0.2, 0.2);
+  leftFoot.position.set(-0.2, 0.15, 0.2);
   character.add(leftFoot);
   player.bodyParts.leftFoot = leftFoot;
   
   // Right foot
   const rightFoot = new THREE.Mesh(footGeo, footMat);
   rightFoot.castShadow = true;
-  rightFoot.position.set(0.2, -0.2, 0.2);
+  rightFoot.position.set(0.2, 0.15, 0.2);
   character.add(rightFoot);
   player.bodyParts.rightFoot = rightFoot;
   
-  // Character container
-  const container = new THREE.Group();
-  container.add(character);
-  container.position.y = 2;
-  
-  return container;
+  character.position.y = 2;
+  return character;
 }
 
-player.mesh = createThirdPersonCharacter();
+player.mesh = createAnimatedCharacter();
 scene.add(player.mesh);
 
-// Character animation
-function updateCharacterAnimation(deltaTime, isMoving, speedFactor, moveAngle) {
-  // Rotate character to face movement direction
-  if (isMoving && moveAngle !== undefined) {
-    player.mesh.rotation.y = moveAngle;
-  }
-  
+// Character animation functions
+function updateCharacterAnimation(deltaTime, isMoving, speedFactor) {
   if (isMoving) {
-    player.animation.walkCycle += deltaTime * speedFactor * 12;
+    player.animation.walkCycle += deltaTime * speedFactor * 10;
     
     // Leg swinging animation
     const legAngle = Math.sin(player.animation.walkCycle) * player.animation.legSwing;
-    const calfAngle = Math.abs(Math.sin(player.animation.walkCycle)) * player.animation.legSwing * 0.8;
+    const calfAngle = Math.sin(player.animation.walkCycle) * player.animation.legSwing * 0.7;
     
-    // Animate legs (alternating)
+    // Left leg forward, right leg back
     player.bodyParts.leftThigh.rotation.x = legAngle;
     player.bodyParts.rightThigh.rotation.x = -legAngle;
     
-    player.bodyParts.leftCalf.rotation.x = -calfAngle;
-    player.bodyParts.rightCalf.rotation.x = calfAngle;
+    player.bodyParts.leftCalf.rotation.x = -calfAngle * 0.5;
+    player.bodyParts.rightCalf.rotation.x = calfAngle * 0.5;
     
     // Arm swinging (opposite to legs)
     const armAngle = Math.sin(player.animation.walkCycle) * player.animation.armSwing;
-    player.bodyParts.leftArm.rotation.x = -armAngle * 0.8;
-    player.bodyParts.rightArm.rotation.x = armAngle * 0.8;
+    player.bodyParts.leftArm.rotation.x = -armAngle;
+    player.bodyParts.rightArm.rotation.x = armAngle;
     
     // Body bob
-    player.group.position.y = Math.sin(player.animation.walkCycle * 2) * player.animation.bobAmount * speedFactor;
-    
-    // Foot position adjustment
-    player.bodyParts.leftFoot.position.z = 0.2 + Math.sin(player.animation.walkCycle) * 0.1;
-    player.bodyParts.rightFoot.position.z = 0.2 - Math.sin(player.animation.walkCycle) * 0.1;
+    player.mesh.position.y = 2 + Math.sin(player.animation.walkCycle * 2) * player.animation.bobAmount * speedFactor;
     
   } else {
-    // Return to idle position smoothly
-    player.bodyParts.leftThigh.rotation.x *= 0.8;
-    player.bodyParts.rightThigh.rotation.x *= 0.8;
-    player.bodyParts.leftCalf.rotation.x *= 0.8;
-    player.bodyParts.rightCalf.rotation.x *= 0.8;
-    player.bodyParts.leftArm.rotation.x *= 0.8;
-    player.bodyParts.rightArm.rotation.x *= 0.8;
-    player.group.position.y *= 0.8;
-    
-    // Reset foot position
-    player.bodyParts.leftFoot.position.z += (0.2 - player.bodyParts.leftFoot.position.z) * 0.1;
-    player.bodyParts.rightFoot.position.z += (0.2 - player.bodyParts.rightFoot.position.z) * 0.1;
+    // Return to idle position
+    player.bodyParts.leftThigh.rotation.x *= 0.9;
+    player.bodyParts.rightThigh.rotation.x *= 0.9;
+    player.bodyParts.leftCalf.rotation.x *= 0.9;
+    player.bodyParts.rightCalf.rotation.x *= 0.9;
+    player.bodyParts.leftArm.rotation.x *= 0.9;
+    player.bodyParts.rightArm.rotation.x *= 0.9;
+    player.mesh.position.y += (2 - player.mesh.position.y) * 0.1;
   }
-  
-  // Head bob
-  player.bodyParts.head.position.y = 2.8 + Math.sin(Date.now() * 0.002) * 0.05;
-}
-
-/* ------------------------------------------------------------------
-   THIRD-PERSON CAMERA
------------------------------------------------------------------- */
-const cameraConfig = {
-  distance: 8,
-  height: 3,
-  angle: 0,
-  targetHeight: 2,
-  smoothness: 0.1,
-  minDistance: 3,
-  maxDistance: 15,
-  currentDistance: 8,
-  mouseSensitivity: 0.005
-};
-
-function updateThirdPersonCamera(deltaTime) {
-  // Camera orbit around player
-  cameraConfig.angle += mouse.x * cameraConfig.mouseSensitivity * 100;
-  
-  // Zoom with mouse wheel
-  cameraConfig.currentDistance = Math.max(
-    cameraConfig.minDistance,
-    Math.min(cameraConfig.maxDistance, cameraConfig.currentDistance - mouse.wheel * 0.5)
-  );
-  
-  // Calculate camera position
-  const cameraX = player.mesh.position.x + Math.sin(cameraConfig.angle) * cameraConfig.currentDistance;
-  const cameraZ = player.mesh.position.z + Math.cos(cameraConfig.angle) * cameraConfig.currentDistance;
-  const cameraY = player.mesh.position.y + cameraConfig.height;
-  
-  // Smooth camera movement
-  camera.position.x += (cameraX - camera.position.x) * cameraConfig.smoothness * deltaTime * 60;
-  camera.position.y += (cameraY - camera.position.y) * cameraConfig.smoothness * deltaTime * 60;
-  camera.position.z += (cameraZ - camera.position.z) * cameraConfig.smoothness * deltaTime * 60;
-  
-  // Look slightly above player's head
-  const lookAtY = player.mesh.position.y + cameraConfig.targetHeight;
-  camera.lookAt(player.mesh.position.x, lookAtY, player.mesh.position.z);
-  
-  // Reset mouse inputs
-  mouse.x = mouse.y = mouse.wheel = 0;
 }
 
 /* ------------------------------------------------------------------
    WORLD GENERATION
 ------------------------------------------------------------------ */
 const world = {
-  size: 200,
+  size: 150,
   ground: null,
   trees: [],
   rocks: [],
   buildings: [],
   enemies: [],
-  coins: [],
-  checkpoints: []
+  coins: []
 };
 
-// Create terrain with more variation
+// Create terrain with hills
 function createTerrain() {
-  const terrainGeo = new THREE.PlaneGeometry(world.size, world.size, 100, 100);
+  const terrainGeo = new THREE.PlaneGeometry(world.size, world.size, 64, 64);
   const terrainMat = new THREE.MeshPhongMaterial({ 
-    color: 0x5da130,
+    color: 0x7CFC00,
     side: THREE.DoubleSide
   });
   
@@ -419,13 +370,13 @@ function createTerrain() {
     const x = vertices[i];
     const z = vertices[i + 2];
     
-    // Multiple sine waves for realistic terrain
+    // Multiple sine waves for natural terrain
     const height = 
-      Math.sin(x * 0.02) * Math.cos(z * 0.02) * 3 +
-      Math.sin(x * 0.05 + 2) * Math.cos(z * 0.05 + 2) * 1.5 +
-      Math.sin(x * 0.1 + 4) * Math.cos(z * 0.1 + 4) * 0.8;
+      Math.sin(x * 0.02) * Math.cos(z * 0.02) * 2 +
+      Math.sin(x * 0.05) * Math.cos(z * 0.05) * 1 +
+      Math.sin(x * 0.1) * Math.cos(z * 0.1) * 0.5;
     
-    vertices[i + 1] = height * 0.5;
+    vertices[i + 1] = height;
   }
   terrainGeo.computeVertexNormals();
   
@@ -435,43 +386,46 @@ function createTerrain() {
   scene.add(terrain);
   world.ground = terrain;
   
-  // Add path texture
-  const pathGeo = new THREE.PlaneGeometry(6, world.size, 1, 1);
-  const pathMat = new THREE.MeshPhongMaterial({ 
-    color: 0x8B7355,
-    side: THREE.DoubleSide
+  // Add grass texture
+  const grassGeo = new THREE.PlaneGeometry(world.size, world.size, 1, 1);
+  const grassMat = new THREE.MeshPhongMaterial({ 
+    color: 0x5da130,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.3
   });
-  const path = new THREE.Mesh(pathGeo, pathMat);
-  path.rotation.x = -Math.PI / 2;
-  path.position.y = 0.1;
-  scene.add(path);
+  const grass = new THREE.Mesh(grassGeo, grassMat);
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.y = 0.1;
+  scene.add(grass);
 }
 
 // Create detailed tree
-function createTree(x, z) {
+function createTree(x, z, height = 5) {
   const group = new THREE.Group();
   
-  // Trunk
-  const trunkGeo = new THREE.CylinderGeometry(0.5, 0.6, 4, 8);
-  const trunkMat = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+  // Trunk with bark texture
+  const trunkGeo = new THREE.CylinderGeometry(0.4, 0.5, height * 0.6, 8);
+  const trunkMat = new THREE.MeshPhongMaterial({ 
+    color: 0x8B4513,
+    shininess: 30
+  });
   const trunk = new THREE.Mesh(trunkGeo, trunkMat);
   trunk.castShadow = true;
-  trunk.position.y = 2;
+  trunk.position.y = height * 0.3;
   group.add(trunk);
   
-  // Leaves (multiple spheres)
-  const leafGeo = new THREE.SphereGeometry(2, 8, 8);
-  const leafMat = new THREE.MeshPhongMaterial({ 
-    color: 0x228B22,
-    transparent: true,
-    opacity: 0.9
-  });
-  
+  // Leaves in layers
+  const leafColors = [0x228B22, 0x2E8B57, 0x32CD32];
   for (let i = 0; i < 3; i++) {
+    const leafGeo = new THREE.SphereGeometry(height * 0.3 * (1 - i * 0.2), 8, 8);
+    const leafMat = new THREE.MeshPhongMaterial({ 
+      color: leafColors[i % leafColors.length],
+      shininess: 100
+    });
     const leaves = new THREE.Mesh(leafGeo, leafMat);
     leaves.castShadow = true;
-    leaves.position.y = 3 + i * 1.5;
-    leaves.scale.set(1, 0.8 + i * 0.2, 1);
+    leaves.position.y = height * 0.6 + i * 0.5;
     group.add(leaves);
   }
   
@@ -479,46 +433,40 @@ function createTree(x, z) {
   return group;
 }
 
-// Create rock
-function createRock(x, z) {
-  const group = new THREE.Group();
-  
-  const rockGeo = new THREE.DodecahedronGeometry(1 + Math.random(), 1);
+// Create rocks
+function createRock(x, z, size = 1) {
+  const rockGeo = new THREE.DodecahedronGeometry(size, 1);
   const rockMat = new THREE.MeshPhongMaterial({ 
     color: 0x808080,
     flatShading: true
   });
   const rock = new THREE.Mesh(rockGeo, rockMat);
   rock.castShadow = true;
-  rock.position.y = 1;
+  rock.position.set(x, size * 0.5, z);
   rock.rotation.set(
     Math.random() * Math.PI,
     Math.random() * Math.PI,
     Math.random() * Math.PI
   );
-  group.add(rock);
-  
-  group.position.set(x, 0, z);
-  return group;
+  return rock;
 }
 
-// Create collectible coin
+// Create shiny coin
 function createCoin(x, z) {
   const group = new THREE.Group();
   
-  // Coin with shine
-  const coinGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
+  const coinGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
   const coinMat = new THREE.MeshPhongMaterial({ 
     color: 0xFFD700,
-    emissive: 0x333300,
+    emissive: 0x222200,
     shininess: 100
   });
   const coin = new THREE.Mesh(coinGeo, coinMat);
   coin.castShadow = true;
   group.add(coin);
   
-  // Glow effect
-  const glowGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.02, 16);
+  // Add glow effect
+  const glowGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.01, 16);
   const glowMat = new THREE.MeshBasicMaterial({ 
     color: 0xFFFF00,
     transparent: true,
@@ -527,46 +475,59 @@ function createCoin(x, z) {
   const glow = new THREE.Mesh(glowGeo, glowMat);
   group.add(glow);
   
-  group.position.set(x, 2, z);
+  group.position.set(x, 1.5, z);
   world.coins.push(group);
   scene.add(group);
   return group;
 }
 
-// Create enemy (with simple animation)
+// Create walking enemy
 function createEnemy(x, z) {
   const group = new THREE.Group();
   
-  // Body
-  const bodyGeo = new THREE.CylinderGeometry(0.8, 0.6, 2, 8);
+  // Enemy body
+  const bodyGeo = new THREE.SphereGeometry(0.8, 8, 8);
   const bodyMat = new THREE.MeshPhongMaterial({ 
     color: 0xFF4444,
-    emissive: 0x330000
+    emissive: 0x220000
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.castShadow = true;
-  body.position.y = 1;
   group.add(body);
   
+  // Enemy legs (simple version)
+  const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 1, 6);
+  const legMat = new THREE.MeshPhongMaterial({ color: 0xCC3333 });
+  
+  const leftLeg = new THREE.Mesh(legGeo, legMat);
+  leftLeg.position.set(-0.3, -0.5, 0);
+  leftLeg.castShadow = true;
+  group.add(leftLeg);
+  
+  const rightLeg = new THREE.Mesh(legGeo, legMat);
+  rightLeg.position.set(0.3, -0.5, 0);
+  rightLeg.castShadow = true;
+  group.add(rightLeg);
+  
   // Eyes
-  const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
+  const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
   const eyeMat = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
   
   const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-  leftEye.position.set(-0.3, 1.5, 0.7);
+  leftEye.position.set(-0.3, 0.2, 0.7);
   group.add(leftEye);
   
   const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-  rightEye.position.set(0.3, 1.5, 0.7);
+  rightEye.position.set(0.3, 0.2, 0.7);
   group.add(rightEye);
   
-  group.position.set(x, 0, z);
+  group.position.set(x, 1, z);
   group.userData = {
     health: 50,
-    speed: 1 + Math.random() * 2,
+    speed: 1 + Math.random(),
     direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
     walkCycle: Math.random() * Math.PI * 2,
-    scale: 1
+    legs: { left: leftLeg, right: rightLeg }
   };
   world.enemies.push(group);
   scene.add(group);
@@ -577,43 +538,43 @@ function createEnemy(x, z) {
 function generateWorld() {
   createTerrain();
   
-  // Generate trees in clusters
-  for (let i = 0; i < 60; i++) {
+  // Generate trees
+  for (let i = 0; i < 80; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const distance = 15 + Math.random() * (world.size/2 - 15);
+    const distance = 20 + Math.random() * (world.size/2 - 20);
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
     
-    const tree = createTree(x, z);
+    const tree = createTree(x, z, 3 + Math.random() * 4);
     world.trees.push(tree);
     scene.add(tree);
   }
   
   // Generate rocks
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 50; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const distance = 10 + Math.random() * (world.size/2 - 10);
+    const distance = 15 + Math.random() * (world.size/2 - 15);
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
     
-    const rock = createRock(x, z);
+    const rock = createRock(x, z, 0.5 + Math.random());
     world.rocks.push(rock);
     scene.add(rock);
   }
   
-  // Generate coins along a path
-  for (let i = 0; i < 25; i++) {
-    const angle = i * 0.25;
-    const distance = 5 + i * 2;
+  // Generate coins
+  for (let i = 0; i < 30; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 10 + Math.random() * (world.size/2 - 10);
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
     createCoin(x, z);
   }
   
   // Generate enemies
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const distance = 20 + Math.random() * (world.size/2 - 20);
+    const distance = 25 + Math.random() * (world.size/2 - 25);
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
     createEnemy(x, z);
@@ -624,7 +585,7 @@ function generateWorld() {
    LIGHTING
 ------------------------------------------------------------------ */
 function setupLighting() {
-  // Main directional light (sun)
+  // Sun
   const sun = new THREE.DirectionalLight(0xffffff, 1);
   sun.position.set(50, 100, 50);
   sun.castShadow = true;
@@ -637,20 +598,14 @@ function setupLighting() {
   scene.add(sun);
   
   // Ambient light
-  const ambient = new THREE.AmbientLight(0x404040, 0.5);
+  const ambient = new THREE.AmbientLight(0x404040, 0.6);
   scene.add(ambient);
   
-  // Fill light
-  const fillLight = new THREE.DirectionalLight(0xffffcc, 0.3);
-  fillLight.position.set(-50, 50, -50);
-  scene.add(fillLight);
-  
   // Player flashlight
-  const flashlight = new THREE.SpotLight(0xffffcc, 1, 50, Math.PI / 6, 0.5, 1);
-  player.mesh.add(flashlight);
-  player.flashlight = flashlight;
+  const flashlight = new THREE.SpotLight(0xffffcc, 0.8, 50, Math.PI / 4, 0.5, 1);
   flashlight.position.set(0, 2, 0);
-  flashlight.target = player.mesh;
+  player.mesh.add(flashlight);
+  player.bodyParts.flashlight = flashlight;
   flashlight.visible = false;
 }
 
@@ -661,28 +616,13 @@ const keys = {};
 const mouse = {
   x: 0,
   y: 0,
-  wheel: 0,
   down: false
 };
 
 document.addEventListener('keydown', (e) => {
   keys[e.key.toLowerCase()] = true;
-  
-  // Quick camera rotation
-  if (e.key === 'q') cameraConfig.angle -= 0.5;
-  if (e.key === 'e') cameraConfig.angle += 0.5;
-  
-  // Reset camera
-  if (e.key === 'r') {
-    cameraConfig.currentDistance = 8;
-    cameraConfig.height = 3;
-  }
-  
-  // Toggle flashlight
-  if (e.key === 'f') {
-    if (player.flashlight) {
-      player.flashlight.visible = !player.flashlight.visible;
-    }
+  if (e.key === 'f' || e.key === 'F') {
+    toggleFlashlight();
   }
 });
 
@@ -690,13 +630,8 @@ document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 document.addEventListener('mousedown', () => mouse.down = true);
 document.addEventListener('mouseup', () => mouse.down = false);
 document.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement === renderer.domElement) {
-    mouse.x += e.movementX;
-    mouse.y += e.movementY;
-  }
-});
-document.addEventListener('wheel', (e) => {
-  mouse.wheel += e.deltaY > 0 ? 1 : -1;
+  mouse.x = (e.movementX || 0) * 0.002;
+  mouse.y = (e.movementY || 0) * 0.002;
 });
 
 // Lock pointer for mouse look
@@ -704,70 +639,68 @@ renderer.domElement.addEventListener('click', () => {
   renderer.domElement.requestPointerLock();
 });
 
+function toggleFlashlight() {
+  if (player.bodyParts.flashlight) {
+    player.bodyParts.flashlight.visible = !player.bodyParts.flashlight.visible;
+  }
+}
+
 /* ------------------------------------------------------------------
-   PLAYER MOVEMENT & PHYSICS
+   PHYSICS & MOVEMENT
 ------------------------------------------------------------------ */
+let cameraRotation = { x: 0, y: 0 };
+
 function updatePlayer(deltaTime) {
   if (!player.isAlive) return;
   
   let isMoving = false;
   let currentSpeed = player.speed;
-  let moveAngle = 0;
   
   // Check for running
   if (keys['shift'] && player.stamina > 0) {
     currentSpeed = player.runSpeed;
     player.isRunning = true;
-    player.stamina = Math.max(0, player.stamina - deltaTime * 25);
+    player.stamina = Math.max(0, player.stamina - deltaTime * 20);
   } else {
     player.isRunning = false;
-    player.stamina = Math.min(100, player.stamina + deltaTime * 15);
+    player.stamina = Math.min(100, player.stamina + deltaTime * 10);
   }
   
-  // Calculate movement vector
-  const moveVector = new THREE.Vector3(0, 0, 0);
+  // Movement
+  const moveDirection = new THREE.Vector3(0, 0, 0);
   
-  if (keys['w'] || keys['arrowup']) {
-    moveVector.z -= 1;
+  if (keys['w']) {
+    moveDirection.z -= 1;
     isMoving = true;
   }
-  if (keys['s'] || keys['arrowdown']) {
-    moveVector.z += 1;
+  if (keys['s']) {
+    moveDirection.z += 1;
     isMoving = true;
   }
-  if (keys['a'] || keys['arrowleft']) {
-    moveVector.x -= 1;
+  if (keys['a']) {
+    moveDirection.x -= 1;
     isMoving = true;
   }
-  if (keys['d'] || keys['arrowright']) {
-    moveVector.x += 1;
+  if (keys['d']) {
+    moveDirection.x += 1;
     isMoving = true;
   }
   
   // Normalize diagonal movement
-  if (moveVector.length() > 0) {
-    moveVector.normalize();
+  if (moveDirection.length() > 0) {
+    moveDirection.normalize();
     
-    // Calculate movement angle based on camera
-    const cameraAngle = cameraConfig.angle;
-    const cos = Math.cos(cameraAngle);
-    const sin = Math.sin(cameraAngle);
+    // Apply camera rotation to movement
+    const angle = cameraRotation.x;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
     
-    // Rotate movement vector based on camera
-    const rotatedX = moveVector.x * cos - moveVector.z * sin;
-    const rotatedZ = moveVector.x * sin + moveVector.z * cos;
+    const rotatedX = moveDirection.x * cos - moveDirection.z * sin;
+    const rotatedZ = moveDirection.x * sin + moveDirection.z * cos;
     
-    // Calculate movement angle for character rotation
-    if (isMoving) {
-      moveAngle = Math.atan2(rotatedX, rotatedZ);
-    }
-    
-    // Apply movement
     player.mesh.position.x += rotatedX * currentSpeed * deltaTime;
     player.mesh.position.z += rotatedZ * currentSpeed * deltaTime;
   }
-  
-  player.isMoving = isMoving;
   
   // Jumping
   if (keys[' '] && player.canJump) {
@@ -776,24 +709,24 @@ function updatePlayer(deltaTime) {
   }
   
   // Gravity
-  player.velocity.y -= 20 * deltaTime;
+  player.velocity.y -= 15 * deltaTime;
   player.mesh.position.y += player.velocity.y * deltaTime;
   
-  // Ground collision
+  // Ground collision (simple terrain following)
+  const halfSize = world.size / 2 - 5;
+  player.mesh.position.x = Math.max(-halfSize, Math.min(halfSize, player.mesh.position.x));
+  player.mesh.position.z = Math.max(-halfSize, Math.min(halfSize, player.mesh.position.z));
+  
+  // Simple ground detection
   if (player.mesh.position.y <= 2) {
     player.mesh.position.y = 2;
     player.velocity.y = 0;
     player.canJump = true;
   }
   
-  // Keep within bounds
-  const halfSize = world.size / 2 - 5;
-  player.mesh.position.x = Math.max(-halfSize, Math.min(halfSize, player.mesh.position.x));
-  player.mesh.position.z = Math.max(-halfSize, Math.min(halfSize, player.mesh.position.z));
-  
   // Update character animation
   const speedFactor = currentSpeed / player.speed;
-  updateCharacterAnimation(deltaTime, isMoving, speedFactor, moveAngle);
+  updateCharacterAnimation(deltaTime, isMoving, speedFactor);
   
   // Update UI
   document.getElementById('health').textContent = Math.round(player.health);
@@ -806,31 +739,22 @@ function updatePlayer(deltaTime) {
     `${player.mesh.position.x.toFixed(1)}, ${player.mesh.position.y.toFixed(1)}, ${player.mesh.position.z.toFixed(1)}`;
 }
 
-/* ------------------------------------------------------------------
-   ENEMY AI & ANIMATION
------------------------------------------------------------------- */
 function updateEnemies(deltaTime) {
   world.enemies.forEach((enemy, index) => {
     if (!enemy.userData) return;
     
-    // Animate enemy (bobbing)
-    enemy.userData.walkCycle += deltaTime * enemy.userData.speed;
-    enemy.position.y = Math.sin(enemy.userData.walkCycle) * 0.2;
+    // Animate enemy legs
+    enemy.userData.walkCycle += deltaTime * enemy.userData.speed * 5;
+    const legAngle = Math.sin(enemy.userData.walkCycle) * Math.PI / 6;
     
-    // Scale pulsing effect
-    enemy.userData.scale = 1 + Math.sin(enemy.userData.walkCycle * 2) * 0.05;
-    enemy.scale.setScalar(enemy.userData.scale);
+    if (enemy.userData.legs) {
+      enemy.userData.legs.left.rotation.x = legAngle;
+      enemy.userData.legs.right.rotation.x = -legAngle;
+    }
     
     // Move enemy
     enemy.position.x += enemy.userData.direction.x * enemy.userData.speed * deltaTime;
     enemy.position.z += enemy.userData.direction.z * enemy.userData.speed * deltaTime;
-    
-    // Rotate to face movement direction
-    enemy.lookAt(
-      enemy.position.x + enemy.userData.direction.x,
-      enemy.position.y,
-      enemy.position.z + enemy.userData.direction.z
-    );
     
     // Bounce off boundaries
     const halfSize = world.size / 2 - 5;
@@ -838,23 +762,32 @@ function updateEnemies(deltaTime) {
       enemy.userData.direction.multiplyScalar(-1);
     }
     
-    // Random direction change
-    if (Math.random() < 0.01) {
+    // Change direction randomly
+    if (Math.random() < 0.005) {
       enemy.userData.direction.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
     }
     
-    // Check for player
-    const distanceToPlayer = enemy.position.distanceTo(player.mesh.position);
-    if (distanceToPlayer < 15) {
+    // Make enemy face movement direction
+    if (enemy.userData.direction.length() > 0) {
+      enemy.lookAt(
+        enemy.position.x + enemy.userData.direction.x,
+        enemy.position.y,
+        enemy.position.z + enemy.userData.direction.z
+      );
+    }
+    
+    // Check collision with player
+    const distance = enemy.position.distanceTo(player.mesh.position);
+    if (distance < 3) {
       // Move toward player
       const directionToPlayer = new THREE.Vector3()
         .subVectors(player.mesh.position, enemy.position)
         .normalize();
-      enemy.userData.direction.lerp(directionToPlayer, 0.05);
+      enemy.position.add(directionToPlayer.multiplyScalar(deltaTime * enemy.userData.speed));
       
       // Damage player if too close
-      if (distanceToPlayer < 2.5) {
-        player.health -= deltaTime * 15;
+      if (distance < 1.5) {
+        player.health -= deltaTime * 10;
         if (player.health <= 0 && player.isAlive) {
           player.isAlive = false;
           endGame();
@@ -864,34 +797,54 @@ function updateEnemies(deltaTime) {
   });
 }
 
-/* ------------------------------------------------------------------
-   COINS & COLLECTIBLES
------------------------------------------------------------------- */
 function updateCoins(deltaTime) {
   world.coins.forEach((coin, index) => {
-    // Rotate and bob
+    // Rotate and bob coins
     coin.rotation.y += deltaTime * 3;
-    coin.position.y = 2 + Math.sin(Date.now() * 0.002 + index) * 0.5;
+    coin.position.y = 1.5 + Math.sin(Date.now() * 0.003 + index) * 0.5;
     
     // Check collection
     const distance = coin.position.distanceTo(player.mesh.position);
     if (distance < 1.5) {
-      // Collection effect
-      coin.scale.multiplyScalar(1.2);
-      setTimeout(() => {
-        scene.remove(coin);
-        world.coins.splice(index, 1);
-      }, 100);
-      
+      scene.remove(coin);
+      world.coins.splice(index, 1);
       player.coins++;
-      player.score += 100;
+      player.score += 50;
       
-      if (player.coins >= 25) {
-        player.score += 2000;
-        alert("🎊 CONGRATULATIONS! You collected all coins!");
+      if (player.coins >= 30) {
+        player.score += 1000;
+        alert("🎉 Congratulations! You collected all coins!");
       }
     }
   });
+}
+
+/* ------------------------------------------------------------------
+   CAMERA CONTROLS (First Person)
+------------------------------------------------------------------ */
+function updateCamera() {
+  // Update camera rotation from mouse
+  cameraRotation.x += mouse.x;
+  cameraRotation.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraRotation.y + mouse.y));
+  
+  // First person camera attached to head
+  const headHeight = 2.8; // Height of head from character base
+  
+  camera.position.copy(player.mesh.position);
+  camera.position.y += headHeight;
+  
+  // Look direction
+  const lookDistance = 10;
+  const lookAt = new THREE.Vector3(
+    Math.sin(cameraRotation.x) * lookDistance,
+    Math.sin(cameraRotation.y) * lookDistance + headHeight,
+    Math.cos(cameraRotation.x) * lookDistance
+  ).add(camera.position);
+  
+  camera.lookAt(lookAt);
+  
+  // Reset mouse movement
+  mouse.x = mouse.y = 0;
 }
 
 /* ------------------------------------------------------------------
@@ -922,7 +875,13 @@ function animate(currentTime = 0) {
     updatePlayer(deltaTime);
     updateEnemies(deltaTime);
     updateCoins(deltaTime);
-    updateThirdPersonCamera(deltaTime);
+    updateCamera();
+    
+    // Handle interaction
+    if (mouse.down) {
+      mouse.down = false;
+      // Could add shooting or interaction here
+    }
   }
   
   renderer.render(scene, camera);
@@ -934,14 +893,6 @@ function animate(currentTime = 0) {
 function init() {
   generateWorld();
   setupLighting();
-  
-  // Position player at start
-  player.mesh.position.set(0, 2, 0);
-  
-  // Position camera behind player
-  camera.position.set(0, 5, 10);
-  camera.lookAt(player.mesh.position);
-  
   animate();
 }
 
@@ -955,6 +906,15 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ------------------------------------------------------------------
+   FULLSCREEN TOGGLE
+------------------------------------------------------------------ */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.fullscreenElement) {
+    document.exitFullscreen();
+  }
 });
 </script>
 

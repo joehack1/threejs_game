@@ -15,6 +15,34 @@
       z-index: 10;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
     }
+    /* Touch controls */
+    #touch-controls {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 18px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .touch-btn {
+      width: 78px;
+      height: 78px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.10);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 28px;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+      pointer-events: auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .touch-btn:active { background: rgba(255,255,255,0.18); }
   </style>
 </head>
 <body>
@@ -231,6 +259,57 @@ const lanePositions = [-3, 0, 3];
 let targetX = 0;
 let score = 0;
 let gameSpeed = 0.1;
+
+/* Touch control helpers */
+function switchLane(dir) {
+  if (dir === 'left' && playerLane > -1) {
+    playerLane--;
+  } else if (dir === 'right' && playerLane < 1) {
+    playerLane++;
+  }
+}
+
+// Add on-screen buttons
+const touchControls = document.createElement('div');
+touchControls.id = 'touch-controls';
+touchControls.innerHTML = `
+  <button id="btn-left" class="touch-btn" aria-label="Left">◀</button>
+  <button id="btn-right" class="touch-btn" aria-label="Right">▶</button>
+`;
+document.body.appendChild(touchControls);
+
+// Button touch handlers
+const btnLeft = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); switchLane('left'); });
+btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); switchLane('right'); });
+
+// Support mouse clicks for desktop/touch hybrid
+btnLeft.addEventListener('mousedown', (e) => { e.preventDefault(); switchLane('left'); });
+btnRight.addEventListener('mousedown', (e) => { e.preventDefault(); switchLane('right'); });
+
+// Swipe support on the whole window
+let touchStartX = null;
+let touchStartY = null;
+const SWIPE_THRESHOLD = 30; // pixels
+
+window.addEventListener('touchstart', (e) => {
+  if (!e.touches || e.touches.length === 0) return;
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, {passive: true});
+
+window.addEventListener('touchend', (e) => {
+  if (touchStartX === null) return;
+  const touch = e.changedTouches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > SWIPE_THRESHOLD) {
+    if (dx > 0) switchLane('right'); else switchLane('left');
+  }
+  touchStartX = null;
+  touchStartY = null;
+}, {passive: true});
 
 /* ------------------------------------------------------------------
    COLLISION DETECTION
