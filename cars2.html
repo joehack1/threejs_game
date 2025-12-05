@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Car Game - Procedural Models</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    #score {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 26px;
+      font-family: Arial;
+      z-index: 10;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    }
+  </style>
+</head>
+<body>
+<div id="score">Score: 0</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
+
+<script>
+/* ------------------------------------------------------------------
+   SCENE SETUP
+------------------------------------------------------------------ */
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x111111, 10, 200);
+
+const camera = new THREE.PerspectiveCamera(
+  75,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+camera.position.set(0, 8, 15);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+/* ------------------------------------------------------------------
+   CREATE PROCEDURAL CAR
+------------------------------------------------------------------ */
+function createCar(color = 0xff0000) {
+  const car = new THREE.Group();
+  
+  // Car body (main part)
+  const bodyGeometry = new THREE.BoxGeometry(2, 0.8, 4);
+  const bodyMaterial = new THREE.MeshPhongMaterial({ color: color });
+  const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  body.position.y = 0.4;
+  car.add(body);
+  
+  // Cabin
+  const cabinGeometry = new THREE.BoxGeometry(1.5, 0.7, 1.5);
+  const cabinMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+  const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+  cabin.castShadow = true;
+  cabin.position.set(0, 1, -0.5);
+  car.add(cabin);
+  
+  // Wheels
+  const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+  const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+  
+  const positions = [
+    [-0.8, 0.3, 1.2],   // Front left
+    [0.8, 0.3, 1.2],    // Front right
+    [-0.8, 0.3, -1.2],  // Back left
+    [0.8, 0.3, -1.2]    // Back right
+  ];
+  
+  positions.forEach((pos) => {
+    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(pos[0], pos[1], pos[2]);
+    wheel.castShadow = true;
+    car.add(wheel);
+  });
+  
+  // Headlights
+  const lightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+  const lightMaterial = new THREE.MeshPhongMaterial({ color: 0xffffcc });
+  
+  const headlight1 = new THREE.Mesh(lightGeometry, lightMaterial);
+  headlight1.position.set(0.6, 0.6, 1.5);
+  car.add(headlight1);
+  
+  const headlight2 = new THREE.Mesh(lightGeometry, lightMaterial);
+  headlight2.position.set(-0.6, 0.6, 1.5);
+  car.add(headlight2);
+  
+  return car;
+}
+
+/* ------------------------------------------------------------------
+   CREATE DETAILED ROAD
+------------------------------------------------------------------ */
+function createRoadSegment(zPosition) {
+  const segment = new THREE.Group();
+  
+  // Road surface
+  const roadGeo = new THREE.PlaneGeometry(10, 50);
+  const roadMat = new THREE.MeshPhongMaterial({ 
+    color: 0x444444,
+    side: THREE.DoubleSide
+  });
+  const road = new THREE.Mesh(roadGeo, roadMat);
+  road.rotation.x = -Math.PI / 2;
+  road.receiveShadow = true;
+  segment.add(road);
+  
+  // Lane markings
+  for (let z = -25; z < 25; z += 5) {
+    const markGeo = new THREE.PlaneGeometry(0.2, 2);
+    const markMat = new THREE.MeshPhongMaterial({ 
+      color: 0xffff00,
+      side: THREE.DoubleSide
+    });
+    const mark = new THREE.Mesh(markGeo, markMat);
+    mark.rotation.x = -Math.PI / 2;
+    mark.position.z = z;
+    mark.position.y = 0.01;
+    segment.add(mark);
+  }
+  
+  // Road borders
+  const borderGeo = new THREE.BoxGeometry(0.5, 0.3, 50);
+  const borderMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+  
+  const leftBorder = new THREE.Mesh(borderGeo, borderMat);
+  leftBorder.position.set(-5.25, 0.15, 0);
+  segment.add(leftBorder);
+  
+  const rightBorder = new THREE.Mesh(borderGeo, borderMat);
+  rightBorder.position.set(5.25, 0.15, 0);
+  segment.add(rightBorder);
+  
+  // Roadside decoration
+  for (let i = 0; i < 10; i++) {
+    const lampGeo = new THREE.CylinderGeometry(0.05, 0.05, 3, 8);
+    const lampMat = new THREE.MeshPhongMaterial({ color: 0x666666 });
+    const lamp = new THREE.Mesh(lampGeo, lampMat);
+    
+    if (Math.random() > 0.5) {
+      lamp.position.set(-6, 1.5, Math.random() * 40 - 20);
+    } else {
+      lamp.position.set(6, 1.5, Math.random() * 40 - 20);
+    }
+    segment.add(lamp);
+  }
+  
+  segment.position.z = zPosition;
+  return segment;
+}
+
+/* ------------------------------------------------------------------
+   INITIALIZE GAME OBJECTS
+------------------------------------------------------------------ */
+const playerCar = createCar(0x00aaff);
+playerCar.position.set(0, 0, 0);
+playerCar.scale.set(0.8, 0.8, 0.8);
+scene.add(playerCar);
+
+// Create multiple road segments for endless road
+const roadSegments = [];
+for (let i = 0; i < 4; i++) {
+  const segment = createRoadSegment(i * 50 - 100);
+  scene.add(segment);
+  roadSegments.push(segment);
+}
+
+/* ------------------------------------------------------------------
+   OBSTACLE CARS
+------------------------------------------------------------------ */
+let obstacles = [];
+const carColors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff];
+
+function spawnObstacleCar() {
+  const car = createCar(carColors[Math.floor(Math.random() * carColors.length)]);
+  car.scale.set(0.7, 0.7, 0.7);
+  
+  // Random lane (-3, 0, 3)
+  const lanes = [-3, 0, 3];
+  car.position.x = lanes[Math.floor(Math.random() * lanes.length)];
+  car.position.y = 0;
+  car.position.z = -40;
+  
+  scene.add(car);
+  obstacles.push({
+    mesh: car,
+    speed: 0.1 + Math.random() * 0.05
+  });
+}
+
+setInterval(spawnObstacleCar, 1500);
+
+/* ------------------------------------------------------------------
+   LIGHTING
+------------------------------------------------------------------ */
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(0, 20, 10);
+directionalLight.castShadow = true;
+scene.add(directionalLight);
+
+// Car headlights
+const playerHeadlight = new THREE.SpotLight(0xffffcc, 1);
+playerHeadlight.position.set(0, 1, 2);
+playerHeadlight.target = playerCar;
+playerCar.add(playerHeadlight);
+
+/* ------------------------------------------------------------------
+   GAME CONTROLS
+------------------------------------------------------------------ */
+const keys = {};
+document.addEventListener("keydown", (e) => keys[e.key] = true);
+document.addEventListener("keyup", (e) => keys[e.key] = false);
+
+let playerLane = 0;
+const lanePositions = [-3, 0, 3];
+let targetX = 0;
+let score = 0;
+let gameSpeed = 0.1;
+
+/* ------------------------------------------------------------------
+   COLLISION DETECTION
+------------------------------------------------------------------ */
+function checkCollision(obj1, obj2) {
+  const box1 = new THREE.Box3().setFromObject(obj1);
+  const box2 = new THREE.Box3().setFromObject(obj2);
+  return box1.intersectsBox(box2);
+}
+
+/* ------------------------------------------------------------------
+   GAME LOOP
+------------------------------------------------------------------ */
+function animate() {
+  requestAnimationFrame(animate);
+  
+  // Handle lane switching
+  if (keys["ArrowLeft"] && playerLane > -1) {
+    playerLane--;
+    keys["ArrowLeft"] = false;
+  }
+  if (keys["ArrowRight"] && playerLane < 1) {
+    playerLane++;
+    keys["ArrowRight"] = false;
+  }
+  
+  // Smooth car movement
+  targetX = lanePositions[playerLane + 1];
+  playerCar.position.x += (targetX - playerCar.position.x) * 0.2;
+  
+  // Update obstacles
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    const obstacle = obstacles[i];
+    obstacle.mesh.position.z += obstacle.speed + gameSpeed;
+    
+    // Rotate wheels
+    obstacle.mesh.children.forEach((child) => {
+      if (child.geometry instanceof THREE.CylinderGeometry) {
+        child.rotation.x += 0.1;
+      }
+    });
+    
+    // Check collision
+    if (checkCollision(playerCar, obstacle.mesh)) {
+      alert("GAME OVER!\nFinal Score: " + score);
+      location.reload();
+    }
+    
+    // Remove passed cars
+    if (obstacle.mesh.position.z > 20) {
+      scene.remove(obstacle.mesh);
+      obstacles.splice(i, 1);
+      score += 10;
+      document.getElementById("score").innerText = "Score: " + score;
+      gameSpeed += 0.002;
+    }
+  }
+  
+  // Animate road segments
+  roadSegments.forEach((segment, index) => {
+    segment.position.z += gameSpeed;
+    
+    if (segment.position.z > 50) {
+      segment.position.z = -150;
+    }
+    
+    // Rotate wheels on player car
+    if (index === 0) {
+      playerCar.children.forEach((child) => {
+        if (child.geometry instanceof THREE.CylinderGeometry) {
+          child.rotation.x += 0.15;
+        }
+      });
+    }
+  });
+  
+  // Camera follow
+  camera.position.x += (playerCar.position.x - camera.position.x) * 0.05;
+  camera.position.z = playerCar.position.z + 15;
+  
+  renderer.render(scene, camera);
+}
+
+animate();
+
+/* ------------------------------------------------------------------
+   RESIZE HANDLING
+------------------------------------------------------------------ */
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>`

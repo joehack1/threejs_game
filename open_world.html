@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Free Roam 3D World</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      font-family: 'Arial', sans-serif;
+    }
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      z-index: 100;
+    }
+    #ui h2 {
+      margin: 0 0 10px 0;
+      color: #4CAF50;
+    }
+    #ui div {
+      margin: 5px 0;
+      font-size: 16px;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: white;
+      background: rgba(0,0,0,0.7);
+      padding: 15px;
+      border-radius: 10px;
+      max-width: 300px;
+      z-index: 100;
+    }
+    #controls h3 {
+      margin-top: 0;
+      color: #4CAF50;
+    }
+    #gameOver {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      color: white;
+      padding: 40px;
+      border-radius: 15px;
+      text-align: center;
+      z-index: 1000;
+    }
+    #gameOver h1 {
+      color: #ff4444;
+      margin-bottom: 20px;
+    }
+    #gameOver button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 18px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    #gameOver button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+<div id="ui">
+  <h2>🏞️ 3D Explorer</h2>
+  <div>❤️ Health: <span id="health">100</span></div>
+  <div>⭐ Score: <span id="score">0</span></div>
+  <div>💰 Coins: <span id="coins">0</span>/50</div>
+  <div>📍 Position: <span id="position">0, 0, 0</span></div>
+  <div>🎯 Mission: Collect coins and avoid enemies!</div>
+</div>
+
+<div id="controls">
+  <h3>Controls</h3>
+  <div>WASD / Arrow Keys - Move</div>
+  <div>Space - Jump</div>
+  <div>Shift - Sprint</div>
+  <div>Mouse - Look around</div>
+  <div>Left Click - Shoot</div>
+</div>
+
+<div id="gameOver">
+  <h1>GAME OVER</h1>
+  <div>Final Score: <span id="finalScore">0</span></div>
+  <div>Coins Collected: <span id="finalCoins">0</span>/50</div>
+  <button onclick="restartGame()">Play Again</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
+<script>
+/* ------------------------------------------------------------------
+   INITIAL SETUP
+------------------------------------------------------------------ */
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x87CEEB, 50, 300);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 10, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+/* ------------------------------------------------------------------
+   PLAYER CONTROLLER
+------------------------------------------------------------------ */
+const player = {
+  mesh: null,
+  speed: 5,
+  jumpForce: 8,
+  velocity: new THREE.Vector3(0, 0, 0),
+  canJump: true,
+  health: 100,
+  coins: 0,
+  score: 0,
+  isAlive: true,
+  bullets: []
+};
+
+function createPlayer() {
+  const group = new THREE.Group();
+  
+  // Body
+  const bodyGeo = new THREE.CapsuleGeometry(0.5, 1.5, 8, 16);
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0x4CAF50 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.castShadow = true;
+  body.position.y = 1;
+  group.add(body);
+  
+  // Head
+  const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+  const headMat = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.castShadow = true;
+  head.position.y = 2.3;
+  group.add(head);
+  
+  // Eyes
+  const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
+  const eyeMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+  
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.15, 2.4, 0.35);
+  group.add(leftEye);
+  
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.15, 2.4, 0.35);
+  group.add(rightEye);
+  
+  group.position.y = 2;
+  return group;
+}
+
+player.mesh = createPlayer();
+scene.add(player.mesh);
+
+/* ------------------------------------------------------------------
+   WORLD GENERATION
+------------------------------------------------------------------ */
+const world = {
+  size: 200,
+  ground: null,
+  objects: [],
+  trees: [],
+  buildings: [],
+  enemies: [],
+  coins: []
+};
+
+// Create terrain
+function createTerrain() {
+  const terrainGeo = new THREE.PlaneGeometry(world.size, world.size, 128, 128);
+  const terrainMat = new THREE.MeshPhongMaterial({ 
+    color: 0x7CFC00,
+    side: THREE.DoubleSide
+  });
+  
+  // Add some terrain variation
+  const vertices = terrainGeo.attributes.position.array;
+  for (let i = 0; i < vertices.length; i += 3) {
+    const x = vertices[i];
+    const z = vertices[i + 2];
+    const distance = Math.sqrt(x * x + z * z);
+    vertices[i + 1] = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 3;
+    
+    // Add hills
+    if (distance < 50) {
+      vertices[i + 1] += Math.sin(x * 0.1) * Math.cos(z * 0.1) * 5;
+    }
+  }
+  terrainGeo.computeVertexNormals();
+  
+  const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+  terrain.rotation.x = -Math.PI / 2;
+  terrain.receiveShadow = true;
+  scene.add(terrain);
+  world.ground = terrain;
+}
+
+// Create trees
+function createTree(x, z) {
+  const group = new THREE.Group();
+  
+  // Trunk
+  const trunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 3, 8);
+  const trunkMat = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.castShadow = true;
+  trunk.position.y = 1.5;
+  group.add(trunk);
+  
+  // Leaves
+  const leavesGeo = new THREE.SphereGeometry(2, 8, 8);
+  const leavesMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+  const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+  leaves.castShadow = true;
+  leaves.position.y = 4;
+  group.add(leaves);
+  
+  group.position.set(x, 0, z);
+  return group;
+}
+
+// Create buildings
+function createBuilding(x, z, size = 5) {
+  const group = new THREE.Group();
+  
+  const buildingGeo = new THREE.BoxGeometry(size, size * 2, size);
+  const buildingMat = new THREE.MeshPhongMaterial({ color: Math.random() * 0x808080 + 0x404040 });
+  const building = new THREE.Mesh(buildingGeo, buildingMat);
+  building.castShadow = true;
+  building.receiveShadow = true;
+  building.position.y = size;
+  group.add(building);
+  
+  // Windows
+  const windowGeo = new THREE.BoxGeometry(0.8, 1, 0.1);
+  const windowMat = new THREE.MeshPhongMaterial({ color: 0xFFFF00 });
+  
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      if (Math.random() > 0.3) {
+        const window = new THREE.Mesh(windowGeo, windowMat);
+        window.position.set(
+          (j - 1) * 1.2,
+          i * 1.5 + 1,
+          size / 2 + 0.1
+        );
+        group.add(window);
+      }
+    }
+  }
+  
+  group.position.set(x, 0, z);
+  return group;
+}
+
+// Create collectible coins
+function createCoin(x, z) {
+  const group = new THREE.Group();
+  
+  const coinGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
+  const coinMat = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+  const coin = new THREE.Mesh(coinGeo, coinMat);
+  coin.castShadow = true;
+  group.add(coin);
+  
+  group.position.set(x, 2, z);
+  world.coins.push(group);
+  scene.add(group);
+  return group;
+}
+
+// Create enemy
+function createEnemy(x, z) {
+  const group = new THREE.Group();
+  
+  const bodyGeo = new THREE.SphereGeometry(1, 8, 8);
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0xFF4444 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.castShadow = true;
+  group.add(body);
+  
+  // Eyes
+  const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
+  const eyeMat = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+  
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.3, 0.3, 0.7);
+  group.add(leftEye);
+  
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.3, 0.3, 0.7);
+  group.add(rightEye);
+  
+  group.position.set(x, 1, z);
+  group.userData = {
+    health: 30,
+    speed: 1 + Math.random() * 2,
+    direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize()
+  };
+  world.enemies.push(group);
+  scene.add(group);
+  return group;
+}
+
+// Generate world
+function generateWorld() {
+  createTerrain();
+  
+  // Generate trees
+  for (let i = 0; i < 100; i++) {
+    const x = (Math.random() - 0.5) * world.size;
+    const z = (Math.random() - 0.5) * world.size;
+    if (Math.abs(x) > 10 && Math.abs(z) > 10) {
+      const tree = createTree(x, z);
+      world.trees.push(tree);
+      scene.add(tree);
+    }
+  }
+  
+  // Generate buildings
+  for (let i = 0; i < 20; i++) {
+    const x = (Math.random() - 0.5) * world.size;
+    const z = (Math.random() - 0.5) * world.size;
+    if (Math.abs(x) > 20 && Math.abs(z) > 20) {
+      const building = createBuilding(x, z, 3 + Math.random() * 4);
+      world.buildings.push(building);
+      scene.add(building);
+    }
+  }
+  
+  // Generate coins
+  for (let i = 0; i < 50; i++) {
+    const x = (Math.random() - 0.5) * world.size;
+    const z = (Math.random() - 0.5) * world.size;
+    createCoin(x, z);
+  }
+  
+  // Generate enemies
+  for (let i = 0; i < 15; i++) {
+    const x = (Math.random() - 0.5) * world.size;
+    const z = (Math.random() - 0.5) * world.size;
+    if (Math.abs(x) > 30 && Math.abs(z) > 30) {
+      createEnemy(x, z);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------
+   LIGHTING
+------------------------------------------------------------------ */
+function setupLighting() {
+  // Sun
+  const sun = new THREE.DirectionalLight(0xffffff, 1);
+  sun.position.set(50, 100, 50);
+  sun.castShadow = true;
+  sun.shadow.camera.left = -50;
+  sun.shadow.camera.right = 50;
+  sun.shadow.camera.top = 50;
+  sun.shadow.camera.bottom = -50;
+  sun.shadow.mapSize.width = 2048;
+  sun.shadow.mapSize.height = 2048;
+  scene.add(sun);
+  
+  // Ambient light
+  const ambient = new THREE.AmbientLight(0x404040, 0.6);
+  scene.add(ambient);
+  
+  // Player light
+  const playerLight = new THREE.PointLight(0xffffcc, 0.5, 20);
+  player.mesh.add(playerLight);
+}
+
+/* ------------------------------------------------------------------
+   INPUT HANDLING
+------------------------------------------------------------------ */
+const keys = {};
+const mouse = {
+  x: 0,
+  y: 0,
+  down: false
+};
+
+document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+document.addEventListener('mousedown', () => mouse.down = true);
+document.addEventListener('mouseup', () => mouse.down = false);
+document.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+// Lock pointer for better controls
+renderer.domElement.addEventListener('click', () => {
+  renderer.domElement.requestPointerLock();
+});
+
+/* ------------------------------------------------------------------
+   SHOOTING MECHANICS
+------------------------------------------------------------------ */
+function shoot() {
+  const bulletGeo = new THREE.SphereGeometry(0.1, 8, 8);
+  const bulletMat = new THREE.MeshPhongMaterial({ color: 0x00ffff });
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+  
+  // Shoot in camera direction
+  const direction = new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  
+  bullet.position.copy(player.mesh.position);
+  bullet.position.y += 1;
+  bullet.userData = {
+    velocity: direction.multiplyScalar(30),
+    lifetime: 2.0
+  };
+  
+  scene.add(bullet);
+  player.bullets.push(bullet);
+}
+
+/* ------------------------------------------------------------------
+   PHYSICS & COLLISION
+------------------------------------------------------------------ */
+function checkCollision(obj1, obj2, distance = 2) {
+  return obj1.position.distanceTo(obj2.position) < distance;
+}
+
+function updatePlayer(deltaTime) {
+  if (!player.isAlive) return;
+  
+  const moveSpeed = keys['shift'] ? player.speed * 1.5 : player.speed;
+  player.velocity.x = 0;
+  player.velocity.z = 0;
+  
+  // Movement
+  if (keys['w'] || keys['arrowup']) player.velocity.z -= moveSpeed;
+  if (keys['s'] || keys['arrowdown']) player.velocity.z += moveSpeed;
+  if (keys['a'] || keys['arrowleft']) player.velocity.x -= moveSpeed;
+  if (keys['d'] || keys['arrowright']) player.velocity.x += moveSpeed;
+  
+  // Normalize diagonal movement
+  if (player.velocity.x !== 0 && player.velocity.z !== 0) {
+    player.velocity.normalize().multiplyScalar(moveSpeed);
+  }
+  
+  // Apply rotation based on camera direction
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  forward.normalize();
+  
+  const right = new THREE.Vector3();
+  right.crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+  
+  const moveDirection = forward.clone().multiplyScalar(-player.velocity.z)
+    .add(right.clone().multiplyScalar(player.velocity.x));
+  
+  player.mesh.position.add(moveDirection.multiplyScalar(deltaTime));
+  
+  // Jumping
+  if (keys[' '] && player.canJump) {
+    player.velocity.y = player.jumpForce;
+    player.canJump = false;
+  }
+  
+  // Gravity
+  player.velocity.y -= 15 * deltaTime;
+  player.mesh.position.y += player.velocity.y * deltaTime;
+  
+  // Ground collision
+  if (player.mesh.position.y <= 2) {
+    player.mesh.position.y = 2;
+    player.velocity.y = 0;
+    player.canJump = true;
+  }
+  
+  // Keep player within bounds
+  const halfSize = world.size / 2;
+  player.mesh.position.x = Math.max(-halfSize, Math.min(halfSize, player.mesh.position.x));
+  player.mesh.position.z = Math.max(-halfSize, Math.min(halfSize, player.mesh.position.z));
+  
+  // Update UI
+  document.getElementById('health').textContent = Math.max(0, player.health);
+  document.getElementById('score').textContent = player.score;
+  document.getElementById('coins').textContent = player.coins;
+  document.getElementById('position').textContent = 
+    `${player.mesh.position.x.toFixed(1)}, ${player.mesh.position.y.toFixed(1)}, ${player.mesh.position.z.toFixed(1)}`;
+}
+
+function updateEnemies(deltaTime) {
+  world.enemies.forEach((enemy, index) => {
+    if (!enemy.userData) return;
+    
+    // Move enemy
+    enemy.position.x += enemy.userData.direction.x * enemy.userData.speed * deltaTime;
+    enemy.position.z += enemy.userData.direction.z * enemy.userData.speed * deltaTime;
+    
+    // Bounce off boundaries
+    const halfSize = world.size / 2 - 5;
+    if (Math.abs(enemy.position.x) > halfSize || Math.abs(enemy.position.z) > halfSize) {
+      enemy.userData.direction.multiplyScalar(-1);
+    }
+    
+    // Change direction randomly
+    if (Math.random() < 0.01) {
+      enemy.userData.direction.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+    }
+    
+    // Rotate slowly
+    enemy.rotation.y += deltaTime;
+    
+    // Check collision with player
+    if (checkCollision(enemy, player.mesh, 2.5)) {
+      player.health -= 5 * deltaTime;
+      if (player.health <= 0 && player.isAlive) {
+        player.isAlive = false;
+        endGame();
+      }
+    }
+  });
+}
+
+function updateCoins() {
+  world.coins.forEach((coin, index) => {
+    // Rotate coin
+    coin.rotation.y += 0.05;
+    coin.position.y = 2 + Math.sin(Date.now() * 0.003 + index) * 0.5;
+    
+    // Check collection
+    if (checkCollision(coin, player.mesh, 1.5)) {
+      scene.remove(coin);
+      world.coins.splice(index, 1);
+      player.coins++;
+      player.score += 10;
+      
+      if (player.coins >= 50) {
+        player.score += 1000;
+        alert("Congratulations! You collected all coins! Keep exploring!");
+      }
+    }
+  });
+}
+
+function updateBullets(deltaTime) {
+  player.bullets.forEach((bullet, index) => {
+    bullet.position.add(bullet.userData.velocity.clone().multiplyScalar(deltaTime));
+    bullet.userData.lifetime -= deltaTime;
+    
+    if (bullet.userData.lifetime <= 0) {
+      scene.remove(bullet);
+      player.bullets.splice(index, 1);
+    }
+    
+    // Check bullet-enemy collision
+    world.enemies.forEach((enemy, enemyIndex) => {
+      if (checkCollision(bullet, enemy, 1.5)) {
+        enemy.userData.health -= 10;
+        
+        if (enemy.userData.health <= 0) {
+          scene.remove(enemy);
+          world.enemies.splice(enemyIndex, 1);
+          player.score += 50;
+        }
+        
+        scene.remove(bullet);
+        player.bullets.splice(index, 1);
+      }
+    });
+  });
+}
+
+/* ------------------------------------------------------------------
+   CAMERA CONTROLS
+------------------------------------------------------------------ */
+let cameraAngle = { x: 0, y: 0 };
+const cameraDistance = 10;
+
+function updateCamera() {
+  // Third-person camera following player
+  const cameraOffset = new THREE.Vector3(0, 3, cameraDistance);
+  
+  // Rotate camera based on mouse
+  cameraAngle.x += mouse.x * 0.02;
+  cameraAngle.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraAngle.y + mouse.y * 0.02));
+  
+  // Apply rotation to camera offset
+  const quaternion = new THREE.Quaternion();
+  quaternion.setFromEuler(new THREE.Euler(cameraAngle.y, cameraAngle.x, 0));
+  cameraOffset.applyQuaternion(quaternion);
+  
+  // Set camera position
+  camera.position.copy(player.mesh.position).add(cameraOffset);
+  camera.lookAt(player.mesh.position);
+  
+  // Reset mouse for next frame
+  mouse.x = mouse.y = 0;
+}
+
+/* ------------------------------------------------------------------
+   GAME LOGIC
+------------------------------------------------------------------ */
+function endGame() {
+  document.getElementById('finalScore').textContent = player.score;
+  document.getElementById('finalCoins').textContent = player.coins;
+  document.getElementById('gameOver').style.display = 'block';
+}
+
+function restartGame() {
+  location.reload();
+}
+
+/* ------------------------------------------------------------------
+   GAME LOOP
+------------------------------------------------------------------ */
+let lastTime = 0;
+
+function animate(currentTime = 0) {
+  requestAnimationFrame(animate);
+  
+  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.033);
+  lastTime = currentTime;
+  
+  if (player.isAlive) {
+    updatePlayer(deltaTime);
+    updateEnemies(deltaTime);
+    updateCoins();
+    updateBullets(deltaTime);
+    updateCamera();
+    
+    // Handle shooting
+    if (mouse.down) {
+      mouse.down = false;
+      shoot();
+    }
+  }
+  
+  renderer.render(scene, camera);
+}
+
+/* ------------------------------------------------------------------
+   INITIALIZE GAME
+------------------------------------------------------------------ */
+function init() {
+  generateWorld();
+  setupLighting();
+  animate();
+}
+
+// Start game
+init();
+
+/* ------------------------------------------------------------------
+   RESIZE HANDLER
+------------------------------------------------------------------ */
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ------------------------------------------------------------------
+   FULLSCREEN TOGGLE
+------------------------------------------------------------------ */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'f' || e.key === 'F') {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+});
+</script>
+
+</body>
+</html>
