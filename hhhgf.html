@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Character Animation Controller</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        #header {
+            padding: 20px;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        #content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #canvas-container canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #controls {
+            width: 300px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .control-section {
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #4facfe;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 5px;
+        }
+        
+        .btn-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        .animation-btn {
+            background: linear-gradient(135deg, #2c3e50, #4a6491);
+            color: white;
+            border: none;
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .animation-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+        
+        .animation-btn.active {
+            background: linear-gradient(135deg, #00b09b, #96c93d);
+            box-shadow: 0 0 15px rgba(0, 176, 155, 0.5);
+        }
+        
+        .key-hint {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+        
+        #instructions {
+            background-color: rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+        
+        #instructions h3 {
+            color: #00f2fe;
+            margin-bottom: 10px;
+        }
+        
+        #instructions ul {
+            padding-left: 20px;
+        }
+        
+        #instructions li {
+            margin-bottom: 8px;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 10px;
+            z-index: 10;
+        }
+        
+        .spinner {
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top: 5px solid #4facfe;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #status {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .icon {
+            font-size: 1.2rem;
+        }
+        
+        @media (max-width: 1024px) {
+            #content {
+                flex-direction: column;
+            }
+            
+            #controls {
+                width: 100%;
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="header">
+            <h1>3D Character Animation Controller</h1>
+            <p class="subtitle">Control a 3D character with multiple animations including run, jump, sit, stealth, and sleep. Use keyboard controls or click the buttons below.</p>
+        </div>
+        
+        <div id="content">
+            <div id="canvas-container">
+                <div id="loading">
+                    <div class="spinner"></div>
+                    <p>Loading 3D model and environment...</p>
+                </div>
+            </div>
+            
+            <div id="controls">
+                <div class="control-section">
+                    <h2>Animation Controls</h2>
+                    <div class="btn-group">
+                        <button class="animation-btn" data-action="idle">
+                            <span class="icon">🧍</span> Idle
+                        </button>
+                        <button class="animation-btn" data-action="run">
+                            <span class="icon">🏃</span> Run
+                        </button>
+                        <button class="animation-btn" data-action="jump">
+                            <span class="icon">🤸</span> Jump
+                        </button>
+                        <button class="animation-btn" data-action="sit">
+                            <span class="icon">🧘</span> Sit
+                        </button>
+                        <button class="animation-btn" data-action="stealth">
+                            <span class="icon">🦹</span> Stealth
+                        </button>
+                        <button class="animation-btn" data-action="sleep">
+                            <span class="icon">😴</span> Sleep
+                        </button>
+                    </div>
+                    <p class="key-hint">Press 1-6 keys for quick animation selection</p>
+                </div>
+                
+                <div class="control-section">
+                    <h2>Movement Controls</h2>
+                    <div class="btn-group">
+                        <button class="animation-btn" id="move-forward">
+                            <span class="icon">↑</span> Move Forward
+                        </button>
+                        <button class="animation-btn" id="move-backward">
+                            <span class="icon">↓</span> Move Backward
+                        </button>
+                        <button class="animation-btn" id="move-left">
+                            <span class="icon">←</span> Strafe Left
+                        </button>
+                        <button class="animation-btn" id="move-right">
+                            <span class="icon">→</span> Strafe Right
+                        </button>
+                    </div>
+                    <p class="key-hint">Use WASD or arrow keys for movement</p>
+                </div>
+                
+                <div class="control-section">
+                    <h2>Camera Controls</h2>
+                    <div class="btn-group">
+                        <button class="animation-btn" id="reset-camera">
+                            <span class="icon">📷</span> Reset Camera
+                        </button>
+                        <button class="animation-btn" id="toggle-orbit">
+                            <span class="icon">🔄</span> Toggle Orbit
+                        </button>
+                    </div>
+                    <p class="key-hint">Drag to rotate, scroll to zoom</p>
+                </div>
+
+                <div class="control-section">
+                    <h2>Rig Controls</h2>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <label><input type="checkbox" id="toggle-skeleton"> Show Skeleton</label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <strong>Selected Bone:</strong> <span id="selected-bone-name">None</span>
+                        </div>
+
+                        <div>
+                            <label>Rotate X: <input id="bone-rot-x" type="number" step="0.1" style="width:80px">°</label>
+                            <label>Rotate Y: <input id="bone-rot-y" type="number" step="0.1" style="width:80px">°</label>
+                            <label>Rotate Z: <input id="bone-rot-z" type="number" step="0.1" style="width:80px">°</label>
+                        </div>
+
+                        <div style="display:flex;gap:8px;">
+                            <button class="animation-btn" id="set-rotate-mode">Rotate Mode</button>
+                            <button class="animation-btn" id="set-translate-mode">Translate Mode</button>
+                            <button class="animation-btn" id="set-scale-mode">Scale Mode</button>
+                        </div>
+
+                        <p class="key-hint">Click a bone (near the mesh) to select it, then use sliders or TransformControls to manipulate.</p>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h2>Import Animations</h2>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <p style="font-size:0.9rem;">You can import external GLB files containing animation clips (e.g., Mixamo exports). Either drop files below or place `walk.glb`, `run.glb`, `jump.glb` next to this HTML and click "Load Default".</p>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <label>Walk: <input type="file" id="file-walk" accept=".glb"></label>
+                            <label>Run: <input type="file" id="file-run" accept=".glb"></label>
+                            <label>Jump: <input type="file" id="file-jump" accept=".glb"></label>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="animation-btn" id="load-default-anims">Load Default Files</button>
+                            <button class="animation-btn" id="clear-imported">Clear Imported</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="instructions">
+                    <h3>Instructions</h3>
+                    <ul>
+                        <li><strong>WASD/Arrow Keys:</strong> Move character</li>
+                        <li><strong>Mouse Drag:</strong> Rotate camera</li>
+                        <li><strong>Mouse Scroll:</strong> Zoom in/out</li>
+                        <li><strong>Keys 1-6:</strong> Switch animations quickly</li>
+                        <li><strong>Space:</strong> Jump action</li>
+                        <li><strong>Shift:</strong> Run faster</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div id="status">
+            Current Animation: <span id="current-animation">Idle</span> | 
+            Controls: <span id="control-mode">Mouse & Keyboard</span>
+        </div>
+    </div>
+
+    <!-- Import Three.js and necessary addons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    
+    <script>
+        // Main Three.js application
+        document.addEventListener('DOMContentLoaded', function() {
+            // Global variables
+            let scene, camera, renderer, controls;
+            let character, mixer, animations = {};
+            let skinnedMesh = null;
+            let skeletonHelper = null;
+            let transformControls = null;
+            let raycaster = new THREE.Raycaster();
+            let mouse = new THREE.Vector2();
+            let selectedBone = null;
+            let currentAction, activeAction;
+            let clock = new THREE.Clock();
+            let characterSpeed = 0.1;
+            let isMoving = false;
+            let movementDirection = new THREE.Vector3();
+            let animationActions = {};
+            
+            // Animation states
+            const ANIMATION_STATES = {
+                IDLE: 'idle',
+                RUN: 'run',
+                JUMP: 'jump',
+                SIT: 'sit',
+                STEALTH: 'stealth',
+                SLEEP: 'sleep'
+            };
+            
+            // Initialize the scene
+            function init() {
+                // Create scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x1a1a2e);
+                scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
+                
+                // Create camera
+                camera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight - 120), 0.1, 1000);
+                camera.position.set(5, 3, 5);
+                
+                // Create renderer
+                const canvasContainer = document.getElementById('canvas-container');
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                renderer.setPixelRatio(window.devicePixelRatio);
+                canvasContainer.appendChild(renderer.domElement);
+                
+                // Add orbit controls
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.minDistance = 2;
+                controls.maxDistance = 20;
+                controls.maxPolarAngle = Math.PI / 2 - 0.1; // Prevent going under ground
+                
+                // Add lights
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 20, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.camera.left = -20;
+                directionalLight.shadow.camera.right = 20;
+                directionalLight.shadow.camera.top = 20;
+                directionalLight.shadow.camera.bottom = -20;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                scene.add(directionalLight);
+                
+                // Add a simple ground
+                const groundGeometry = new THREE.PlaneGeometry(50, 50);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x3a7ca5, 
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                scene.add(ground);
+                
+                // Add a grid helper
+                const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
+                scene.add(gridHelper);
+                
+                // Add some decorative elements
+                addDecorativeElements();
+                
+                // Create TransformControls (for manipulating bones)
+                transformControls = new THREE.TransformControls(camera, renderer.domElement);
+                transformControls.addEventListener('dragging-changed', function (event) {
+                    controls.enabled = !event.value;
+                });
+                transformControls.setMode('rotate');
+                scene.add(transformControls);
+
+                // Load the character model
+                loadCharacter();
+
+                    // Try to auto-load default animation files if they exist
+                    // (walk.glb, run.glb, jump.glb placed next to this HTML)
+                    document.getElementById('load-default-anims').addEventListener('click', function(){
+                        if (!character) {
+                            updateStatus('Load character first');
+                            return;
+                        }
+                        loadAnimationFromPath('walk.glb', 'walk');
+                        loadAnimationFromPath('run.glb', 'run');
+                        loadAnimationFromPath('jump.glb', 'jump');
+                    });
+
+                    document.getElementById('clear-imported').addEventListener('click', function(){
+                        ['walk','run','jump'].forEach(k => { if (animationActions[k]) { animationActions[k].stop(); delete animationActions[k]; } });
+                        updateStatus('Cleared imported animations');
+                    });
+
+                    // File inputs
+                    document.getElementById('file-walk').addEventListener('change', function(e){ if (e.target.files[0]) loadAnimationFromFile(e.target.files[0], 'walk'); });
+                    document.getElementById('file-run').addEventListener('change', function(e){ if (e.target.files[0]) loadAnimationFromFile(e.target.files[0], 'run'); });
+                    document.getElementById('file-jump').addEventListener('change', function(e){ if (e.target.files[0]) loadAnimationFromFile(e.target.files[0], 'jump'); });
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+                // Hide loading screen
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                }, 1500);
+                
+                // Start animation loop
+                animate();
+            }
+            
+            // Add decorative elements to the scene
+            function addDecorativeElements() {
+                // Add some boxes as obstacles
+                const boxGeometry = new THREE.BoxGeometry(1, 2, 1);
+                const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x8a4fff, roughness: 0.7 });
+                
+                for (let i = 0; i < 5; i++) {
+                    const box = new THREE.Mesh(boxGeometry, boxMaterial);
+                    box.position.set(
+                        Math.random() * 20 - 10,
+                        1,
+                        Math.random() * 20 - 10
+                    );
+                    box.castShadow = true;
+                    box.receiveShadow = true;
+                    scene.add(box);
+                }
+                
+                // Add some trees (cones on cylinders)
+                for (let i = 0; i < 8; i++) {
+                    // Trunk
+                    const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 2);
+                    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+                    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                    
+                    // Leaves
+                    const leavesGeometry = new THREE.ConeGeometry(1.5, 3, 8);
+                    const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.8 });
+                    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                    
+                    const x = Math.random() * 30 - 15;
+                    const z = Math.random() * 30 - 15;
+                    
+                    trunk.position.set(x, 1, z);
+                    leaves.position.set(x, 3.5, z);
+                    
+                    trunk.castShadow = true;
+                    trunk.receiveShadow = true;
+                    leaves.castShadow = true;
+                    leaves.receiveShadow = true;
+                    
+                    scene.add(trunk);
+                    scene.add(leaves);
+                }
+            }
+            
+            // Load the character model
+            function loadCharacter() {
+                const loader = new THREE.GLTFLoader();
+                
+                // Try to load the specified model
+                const modelPath = 'dq.glb';
+                
+                loader.load(
+                    modelPath,
+                    function(gltf) {
+                        character = gltf.scene;
+                        character.traverse(function(node) {
+                            if (node.isMesh) {
+                                node.castShadow = true;
+                                node.receiveShadow = true;
+                            }
+                            if (node.isSkinnedMesh) {
+                                skinnedMesh = node;
+                            }
+                        });
+                        
+                        // Position and scale the character
+                        character.position.set(0, 0, 0);
+                        character.scale.set(1, 1, 1);
+                        scene.add(character);
+
+                        // If we found a skinned mesh, add a SkeletonHelper for visualization
+                        if (skinnedMesh) {
+                            skeletonHelper = new THREE.SkeletonHelper(skinnedMesh);
+                            skeletonHelper.visible = false; // start hidden
+                            scene.add(skeletonHelper);
+                        }
+                        
+                        // Setup animation mixer
+                        mixer = new THREE.AnimationMixer(character);
+                        
+                        // Check if model has animations
+                        if (gltf.animations && gltf.animations.length) {
+                            console.log(`Model has ${gltf.animations.length} animations`);
+                            
+                            // Create animation actions
+                            gltf.animations.forEach((clip) => {
+                                const action = mixer.clipAction(clip);
+                                animationActions[clip.name.toLowerCase()] = action;
+                            });
+                            
+                            // Default to idle animation
+                            playAnimation(ANIMATION_STATES.IDLE);
+                        } else {
+                            // If no animations in model, create placeholder animations programmatically
+                            createPlaceholderAnimations();
+                            console.log("No animations found in model, using placeholder animations");
+                        }
+                        
+                        updateStatus("Model loaded successfully");
+                    },
+                    function(xhr) {
+                        // Progress callback
+                        const percentLoaded = (xhr.loaded / xhr.total * 100).toFixed(2);
+                        document.getElementById('loading').innerHTML = `
+                            <div class="spinner"></div>
+                            <p>Loading model: ${percentLoaded}%</p>
+                        `;
+                    },
+                    function(error) {
+                        console.error('Error loading model:', error);
+                        updateStatus("Error loading model. Using placeholder character.");
+
+                        // Create a placeholder character if model fails to load
+                        createPlaceholderCharacter();
+                        createPlaceholderAnimations();
+
+                        // Give the user actionable hints in the UI about common causes
+                        document.getElementById('loading').innerHTML = `
+                            <div style="color: #ff6b6b;">⚠</div>
+                            <p>Model failed to load. Using placeholder character.</p>
+                            <p style="font-size: 0.9rem; margin-top: 10px;">Expected model path: <code>${modelPath}</code></p>
+                            <p style="font-size: 0.85rem; margin-top: 8px;">If you opened this file directly (file://), the browser may block loading.</p>
+                            <p style="font-size: 0.85rem; margin-top: 4px;">Run a local server in this folder and open <code>http://localhost:8000/hhhgf.html</code></p>
+                            <p style="font-size: 0.85rem; margin-top: 6px; color: #ffd580;">PowerShell: <code>python -m http.server 8000</code> or <code>npx http-server -c-1 .</code></p>
+                            <p style="font-size: 0.85rem; margin-top: 6px;">If the model uses DRACO compression, you must configure <code>THREE.DRACOLoader</code> and set <code>dracoDecoderPath</code>.</p>
+                        `;
+
+                        setTimeout(() => {
+                            document.getElementById('loading').style.display = 'none';
+                        }, 5000);
+                    }
+                );
+            }
+
+            // Add animation clips from a loaded glTF (attach to character's mixer)
+            function addClipsFromGltf(gltf, hintName) {
+                if (!gltf || !gltf.animations || !gltf.animations.length) return;
+                if (!mixer) mixer = new THREE.AnimationMixer(character);
+                gltf.animations.forEach((clip) => {
+                    const name = (hintName || clip.name || 'clip').toLowerCase();
+                    // prefer hintName (walk/run/jump); otherwise use clip.name
+                    const key = hintName ? hintName : clip.name.toLowerCase();
+                    // Make a clip that targets the character root
+                    const action = mixer.clipAction(clip, character);
+                    action.clampWhenFinished = true;
+                    if (key === 'jump') {
+                        action.setLoop(THREE.LoopOnce, 1);
+                    } else {
+                        action.setLoop(THREE.LoopRepeat);
+                    }
+                    animationActions[key] = action;
+                    console.log('Imported clip', key, '->', clip.name);
+                });
+            }
+
+            // Load animation file from local filesystem (File object)
+            function loadAnimationFromFile(file, hintName) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    const arrayBuffer = evt.target.result;
+                    const loader = new THREE.GLTFLoader();
+                    loader.parse(arrayBuffer, '', function(gltf) {
+                        addClipsFromGltf(gltf, hintName);
+                        updateStatus(`Loaded animation from ${file.name}`);
+                    }, function(err){
+                        console.error('Error parsing animation file', err);
+                        updateStatus('Failed to parse animation file');
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            }
+
+            // Load animation from a path relative to page
+            function loadAnimationFromPath(path, hintName) {
+                const loader = new THREE.GLTFLoader();
+                loader.load(path, function(gltf){
+                    addClipsFromGltf(gltf, hintName);
+                    updateStatus(`Loaded animation from ${path}`);
+                }, function(xhr){}, function(err){
+                    console.warn('Could not load animation', path, err);
+                });
+            }
+
+            // Helper: select a bone by clicking the skinned mesh
+            function onPointerDown(event) {
+                // calculate mouse position in normalized device coordinates (-1 to +1) for both components
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = - ((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+
+                const intersects = raycaster.intersectObject(scene, true);
+                if (intersects.length === 0) return;
+
+                // Find intersected skinned mesh
+                let hit = null;
+                for (const inter of intersects) {
+                    let obj = inter.object;
+                    while (obj) {
+                        if (obj.isSkinnedMesh) {
+                            hit = {mesh: obj, point: inter.point};
+                            break;
+                        }
+                        obj = obj.parent;
+                    }
+                    if (hit) break;
+                }
+
+                if (!hit || !hit.mesh || !hit.mesh.skeleton) return;
+
+                // Find nearest bone to intersection point
+                const bones = hit.mesh.skeleton.bones;
+                let nearest = null;
+                let minDist = Infinity;
+                const tmp = new THREE.Vector3();
+                for (const b of bones) {
+                    b.getWorldPosition(tmp);
+                    const d = tmp.distanceTo(hit.point);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearest = b;
+                    }
+                }
+
+                // If the nearest bone is reasonably close, select it
+                if (nearest && minDist < 1.5) {
+                    selectedBone = nearest;
+                    transformControls.attach(selectedBone);
+                    updateSelectedBoneUI();
+                }
+            }
+
+            // Update UI inputs from selected bone
+            function updateSelectedBoneUI() {
+                const nameEl = document.getElementById('selected-bone-name');
+                const rx = document.getElementById('bone-rot-x');
+                const ry = document.getElementById('bone-rot-y');
+                const rz = document.getElementById('bone-rot-z');
+                if (!selectedBone) {
+                    nameEl.textContent = 'None';
+                    rx.value = ry.value = rz.value = 0;
+                    return;
+                }
+                nameEl.textContent = selectedBone.name || '(unnamed)';
+                rx.value = THREE.Math.radToDeg(selectedBone.rotation.x).toFixed(2);
+                ry.value = THREE.Math.radToDeg(selectedBone.rotation.y).toFixed(2);
+                rz.value = THREE.Math.radToDeg(selectedBone.rotation.z).toFixed(2);
+            }
+
+            // Apply rotation from slider to bone
+            function onBoneRotationInput() {
+                if (!selectedBone) return;
+                const rx = parseFloat(document.getElementById('bone-rot-x').value) || 0;
+                const ry = parseFloat(document.getElementById('bone-rot-y').value) || 0;
+                const rz = parseFloat(document.getElementById('bone-rot-z').value) || 0;
+                selectedBone.rotation.x = THREE.Math.degToRad(rx);
+                selectedBone.rotation.y = THREE.Math.degToRad(ry);
+                selectedBone.rotation.z = THREE.Math.degToRad(rz);
+                if (skeletonHelper) skeletonHelper.update();
+            }
+            
+            // Create a placeholder character if model fails to load
+            function createPlaceholderCharacter() {
+                // Create a simple humanoid figure as placeholder
+                const group = new THREE.Group();
+                
+                // Body
+                const bodyGeometry = new THREE.BoxGeometry(1, 1.5, 0.5);
+                const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x3498db });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.position.y = 1.5;
+                body.castShadow = true;
+                group.add(body);
+                
+                // Head
+                const headGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+                const headMaterial = new THREE.MeshStandardMaterial({ color: 0xf1c40f });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.y = 2.75;
+                head.castShadow = true;
+                group.add(head);
+                
+                // Arms
+                const armGeometry = new THREE.BoxGeometry(0.25, 1, 0.25);
+                const armMaterial = new THREE.MeshStandardMaterial({ color: 0x3498db });
+                
+                const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+                leftArm.position.set(-0.75, 1.5, 0);
+                leftArm.castShadow = true;
+                group.add(leftArm);
+                
+                const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+                rightArm.position.set(0.75, 1.5, 0);
+                rightArm.castShadow = true;
+                group.add(rightArm);
+                
+                // Legs
+                const legGeometry = new THREE.BoxGeometry(0.3, 1, 0.3);
+                const legMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3e50 });
+                
+                const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                leftLeg.position.set(-0.3, 0.5, 0);
+                leftLeg.castShadow = true;
+                group.add(leftLeg);
+                
+                const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                rightLeg.position.set(0.3, 0.5, 0);
+                rightLeg.castShadow = true;
+                group.add(rightLeg);
+                
+                character = group;
+                character.position.set(0, 0, 0);
+                scene.add(character);
+                
+                // Create animation mixer
+                mixer = new THREE.AnimationMixer(character);
+            }
+            
+            // Create placeholder animations if model doesn't have them
+            function createPlaceholderAnimations() {
+                // Create simple keyframe animations for the placeholder character
+                
+                // Idle animation (subtle bouncing)
+                const idleClip = new THREE.AnimationClip('idle', 2, [
+                    // Head bobbing
+                    createKeyframeTrack('.children[1].position[y]', [0, 1, 2], [2.75, 2.8, 2.75]),
+                    // Slight arm movement
+                    createKeyframeTrack('.children[2].rotation[z]', [0, 1, 2], [0, 0.1, 0]),
+                    createKeyframeTrack('.children[3].rotation[z]', [0, 1, 2], [0, -0.1, 0])
+                ]);
+                
+                // Run animation
+                const runClip = new THREE.AnimationClip('run', 0.5, [
+                    // Arm swing
+                    createKeyframeTrack('.children[2].rotation[z]', [0, 0.25, 0.5], [0.5, -0.5, 0.5]),
+                    createKeyframeTrack('.children[3].rotation[z]', [0, 0.25, 0.5], [-0.5, 0.5, -0.5]),
+                    // Leg movement
+                    createKeyframeTrack('.children[4].rotation[z]', [0, 0.25, 0.5], [0.5, -0.5, 0.5]),
+                    createKeyframeTrack('.children[5].rotation[z]', [0, 0.25, 0.5], [-0.5, 0.5, -0.5]),
+                    // Body bounce
+                    createKeyframeTrack('.children[0].position[y]', [0, 0.25, 0.5], [1.5, 1.6, 1.5])
+                ]);
+                
+                // Jump animation
+                const jumpClip = new THREE.AnimationClip('jump', 1, [
+                    // Body up and down
+                    createKeyframeTrack('.position[y]', [0, 0.5, 1], [0, 2, 0]),
+                    // Arm movement
+                    createKeyframeTrack('.children[2].rotation[z]', [0, 0.5, 1], [0, 1, 0]),
+                    createKeyframeTrack('.children[3].rotation[z]', [0, 0.5, 1], [0, -1, 0])
+                ]);
+                
+                // Sit animation
+                const sitClip = new THREE.AnimationClip('sit', 1, [
+                    // Lower body
+                    createKeyframeTrack('.position[y]', [0, 1], [0, 0.5]),
+                    // Bend legs
+                    createKeyframeTrack('.children[4].rotation[z]', [0, 1], [0, -1.5]),
+                    createKeyframeTrack('.children[5].rotation[z]', [0, 1], [0, -1.5]),
+                    // Bend arms
+                    createKeyframeTrack('.children[2].rotation[z]', [0, 1], [0, 0.5]),
+                    createKeyframeTrack('.children[3].rotation[z]', [0, 1], [0, -0.5])
+                ]);
+                
+                // Stealth animation
+                const stealthClip = new THREE.AnimationClip('stealth', 1, [
+                    // Lower body more
+                    createKeyframeTrack('.position[y]', [0, 1], [0, 0.3]),
+                    // Bend legs more
+                    createKeyframeTrack('.children[4].rotation[z]', [0, 1], [0, -2]),
+                    createKeyframeTrack('.children[5].rotation[z]', [0, 1], [0, -2]),
+                    // Arms forward
+                    createKeyframeTrack('.children[2].rotation[x]', [0, 1], [0, -0.5]),
+                    createKeyframeTrack('.children[3].rotation[x]', [0, 1], [0, -0.5])
+                ]);
+                
+                // Sleep animation
+                const sleepClip = new THREE.AnimationClip('sleep', 2, [
+                    // Lay down
+                    createKeyframeTrack('.rotation[x]', [0, 1], [0, Math.PI/2]),
+                    // Slight breathing motion
+                    createKeyframeTrack('.children[0].scale[y]', [0, 1, 2], [1, 1.02, 1])
+                ]);
+                
+                // Create animation actions
+                animationActions[ANIMATION_STATES.IDLE] = mixer.clipAction(idleClip);
+                animationActions[ANIMATION_STATES.RUN] = mixer.clipAction(runClip);
+                animationActions[ANIMATION_STATES.JUMP] = mixer.clipAction(jumpClip);
+                animationActions[ANIMATION_STATES.SIT] = mixer.clipAction(sitClip);
+                animationActions[ANIMATION_STATES.STEALTH] = mixer.clipAction(stealthClip);
+                animationActions[ANIMATION_STATES.SLEEP] = mixer.clipAction(sleepClip);
+                
+                // Set all animations to loop
+                Object.values(animationActions).forEach(action => {
+                    action.setLoop(THREE.LoopRepeat);
+                });
+                
+                // Play idle animation by default
+                playAnimation(ANIMATION_STATES.IDLE);
+            }
+            
+            // Helper function to create keyframe tracks
+            function createKeyframeTrack(path, times, values) {
+                return new THREE.KeyframeTrack(path, times, values);
+            }
+            
+            // Play a specific animation
+            function playAnimation(animationName) {
+                // If no animation with this name exists, default to idle
+                if (!animationActions[animationName]) {
+                    console.warn(`Animation "${animationName}" not found, using idle instead`);
+                    animationName = ANIMATION_STATES.IDLE;
+                }
+                
+                // If this is already the active animation, do nothing
+                if (activeAction === animationActions[animationName]) return;
+                
+                // Fade out current animation
+                if (activeAction) {
+                    activeAction.fadeOut(0.2);
+                }
+                
+                // Fade in new animation
+                activeAction = animationActions[animationName];
+                activeAction.reset();
+                activeAction.fadeIn(0.2);
+                activeAction.play();
+                
+                // Update UI
+                document.querySelectorAll('.animation-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                
+                const activeBtn = document.querySelector(`.animation-btn[data-action="${animationName}"]`);
+                if (activeBtn) {
+                    activeBtn.classList.add('active');
+                }
+                
+                // Update status
+                document.getElementById('current-animation').textContent = 
+                    animationName.charAt(0).toUpperCase() + animationName.slice(1);
+                
+                currentAction = animationName;
+            }
+            
+            // Setup event listeners
+            function setupEventListeners() {
+                // Animation button clicks
+                document.querySelectorAll('.animation-btn[data-action]').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const action = this.getAttribute('data-action');
+                        playAnimation(action);
+                    });
+                });
+                
+                // Movement buttons
+                document.getElementById('move-forward').addEventListener('mousedown', () => { movementDirection.z = -1; isMoving = true; updateMovementAnimation(); });
+                document.getElementById('move-forward').addEventListener('mouseup', () => { movementDirection.z = 0; if (movementDirection.length() === 0) stopMovement(); });
+                document.getElementById('move-forward').addEventListener('mouseleave', () => { movementDirection.z = 0; if (movementDirection.length() === 0) stopMovement(); });
+                
+                document.getElementById('move-backward').addEventListener('mousedown', () => { movementDirection.z = 1; isMoving = true; updateMovementAnimation(); });
+                document.getElementById('move-backward').addEventListener('mouseup', () => { movementDirection.z = 0; if (movementDirection.length() === 0) stopMovement(); });
+                document.getElementById('move-backward').addEventListener('mouseleave', () => { movementDirection.z = 0; if (movementDirection.length() === 0) stopMovement(); });
+                
+                document.getElementById('move-left').addEventListener('mousedown', () => { movementDirection.x = -1; isMoving = true; updateMovementAnimation(); });
+                document.getElementById('move-left').addEventListener('mouseup', () => { movementDirection.x = 0; if (movementDirection.length() === 0) stopMovement(); });
+                document.getElementById('move-left').addEventListener('mouseleave', () => { movementDirection.x = 0; if (movementDirection.length() === 0) stopMovement(); });
+                
+                document.getElementById('move-right').addEventListener('mousedown', () => { movementDirection.x = 1; isMoving = true; updateMovementAnimation(); });
+                document.getElementById('move-right').addEventListener('mouseup', () => { movementDirection.x = 0; if (movementDirection.length() === 0) stopMovement(); });
+                document.getElementById('move-right').addEventListener('mouseleave', () => { movementDirection.x = 0; if (movementDirection.length() === 0) stopMovement(); });
+                
+                // Camera controls
+                document.getElementById('reset-camera').addEventListener('click', () => {
+                    camera.position.set(5, 3, 5);
+                    controls.target.set(0, 1, 0);
+                    updateStatus("Camera reset");
+                });
+                
+                document.getElementById('toggle-orbit').addEventListener('click', function() {
+                    controls.enabled = !controls.enabled;
+                    updateStatus(`Orbit controls ${controls.enabled ? 'enabled' : 'disabled'}`);
+                    this.classList.toggle('active');
+                });
+                
+                // Keyboard controls
+                document.addEventListener('keydown', handleKeyDown);
+                document.addEventListener('keyup', handleKeyUp);
+                
+                // Window resize
+                window.addEventListener('resize', onWindowResize);
+                // Pointer down for bone selection
+                renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+                // Rig UI
+                document.getElementById('toggle-skeleton').addEventListener('change', function(e){
+                    if (skeletonHelper) skeletonHelper.visible = e.target.checked;
+                });
+                document.getElementById('bone-rot-x').addEventListener('input', onBoneRotationInput);
+                document.getElementById('bone-rot-y').addEventListener('input', onBoneRotationInput);
+                document.getElementById('bone-rot-z').addEventListener('input', onBoneRotationInput);
+                document.getElementById('set-rotate-mode').addEventListener('click', function(){ transformControls.setMode('rotate'); });
+                document.getElementById('set-translate-mode').addEventListener('click', function(){ transformControls.setMode('translate'); });
+                document.getElementById('set-scale-mode').addEventListener('click', function(){ transformControls.setMode('scale'); });
+                
+                // Keyboard number keys for animation switching
+                document.addEventListener('keypress', (e) => {
+                    const key = e.key;
+                    const animationMap = {
+                        '1': ANIMATION_STATES.IDLE,
+                        '2': ANIMATION_STATES.RUN,
+                        '3': ANIMATION_STATES.JUMP,
+                        '4': ANIMATION_STATES.SIT,
+                        '5': ANIMATION_STATES.STEALTH,
+                        '6': ANIMATION_STATES.SLEEP
+                    };
+                    
+                    if (animationMap[key]) {
+                        playAnimation(animationMap[key]);
+                    }
+                });
+            }
+            
+            // Handle key down events
+            function handleKeyDown(e) {
+                if (e.key === ' ' || e.key === 'Spacebar') {
+                    // Space for jump
+                    // Play jump - prefer imported jump clip if present
+                    if (animationActions['jump']) {
+                        // play one-shot
+                        animationActions['jump'].reset();
+                        animationActions['jump'].play();
+                        // after duration, return to idle or movement
+                        const dur = animationActions['jump']._clip.duration * 1000 || 1000;
+                        setTimeout(() => {
+                            if (isMoving) {
+                                updateMovementAnimation();
+                            } else {
+                                playAnimation(ANIMATION_STATES.IDLE);
+                            }
+                        }, dur + 50);
+                    } else {
+                        playAnimation(ANIMATION_STATES.JUMP);
+                        setTimeout(() => {
+                            if (currentAction === ANIMATION_STATES.JUMP) {
+                                playAnimation(ANIMATION_STATES.IDLE);
+                            }
+                        }, 1000);
+                    }
+                } else if (e.key === 'Shift') {
+                    // Shift for running
+                    characterSpeed = 0.2;
+                    // If already moving, update to run animation
+                    if (isMoving) {
+                        updateMovementAnimation();
+                    }
+                } else {
+                    switch(e.key.toLowerCase()) {
+                        case 'w':
+                        case 'arrowup':
+                            startMovement('forward');
+                            break;
+                        case 's':
+                        case 'arrowdown':
+                            startMovement('backward');
+                            break;
+                        case 'a':
+                        case 'arrowleft':
+                            startMovement('left');
+                            break;
+                        case 'd':
+                        case 'arrowright':
+                            startMovement('right');
+                            break;
+                    }
+                }
+            }
+            
+            // Handle key up events
+            function handleKeyUp(e) {
+                if (e.key === 'Shift') {
+                    characterSpeed = 0.1;
+                    // If still moving, re-check animation and downgrade from run to walk
+                    if (isMoving) {
+                        updateMovementAnimation();
+                    }
+                } else {
+                    switch(e.key.toLowerCase()) {
+                        case 'w':
+                        case 'arrowup':
+                        case 's':
+                        case 'arrowdown':
+                        case 'a':
+                        case 'arrowleft':
+                        case 'd':
+                        case 'arrowright':
+                            stopMovement();
+                            break;
+                    }
+                }
+            }
+
+            // Update animation based on current movement state and speed
+            function updateMovementAnimation() {
+                if (!isMoving) return;
+                // Check if imported walk/run exist
+                const hasWalk = !!animationActions['walk'];
+                const hasRun = !!animationActions['run'];
+                if (hasWalk || hasRun) {
+                    if (characterSpeed > 0.15 && hasRun) {
+                        playAnimation('run');
+                    } else if (hasWalk) {
+                        playAnimation('walk');
+                    } else {
+                        playAnimation(ANIMATION_STATES.IDLE);
+                    }
+                } else {
+                    // Fallback to built-in actions
+                    if (characterSpeed > 0.15) {
+                        playAnimation(ANIMATION_STATES.RUN);
+                    } else {
+                        playAnimation(ANIMATION_STATES.IDLE);
+                    }
+                }
+            }
+            
+            // Start character movement
+            function startMovement(direction) {
+                // Set movement direction based on input
+                switch(direction) {
+                    case 'forward':
+                        movementDirection.z = -1;
+                        break;
+                    case 'backward':
+                        movementDirection.z = 1;
+                        break;
+                    case 'left':
+                        movementDirection.x = -1;
+                        break;
+                    case 'right':
+                        movementDirection.x = 1;
+                        break;
+                }
+                
+                // Mark as moving if any direction is set
+                isMoving = (movementDirection.length() > 0);
+                
+                // Play appropriate animation based on speed and available clips
+                if (isMoving) {
+                    updateMovementAnimation();
+                }
+            }
+            
+            // Stop character movement
+            function stopMovement() {
+                isMoving = false;
+                movementDirection.set(0, 0, 0);
+                
+                // Only go back to idle if we're not in a special animation
+                if (![ANIMATION_STATES.JUMP, ANIMATION_STATES.SIT, 
+                     ANIMATION_STATES.STEALTH, ANIMATION_STATES.SLEEP].includes(currentAction)) {
+                    playAnimation(ANIMATION_STATES.IDLE);
+                }
+            }
+            
+            // Update character position based on movement
+            function updateCharacterPosition() {
+                if (!character || !isMoving) return;
+                
+                // Normalize movement direction
+                if (movementDirection.length() > 0) {
+                    movementDirection.normalize();
+                }
+                
+                // Move character
+                character.position.x += movementDirection.x * characterSpeed;
+                character.position.z += movementDirection.z * characterSpeed;
+                
+                // Rotate character to face movement direction
+                if (movementDirection.x !== 0 || movementDirection.z !== 0) {
+                    const angle = Math.atan2(movementDirection.x, movementDirection.z);
+                    character.rotation.y = angle;
+                }
+                
+                // Update camera target to follow character
+                controls.target.copy(character.position);
+                controls.target.y = 1;
+            }
+            
+            // Handle window resize
+            function onWindowResize() {
+                const canvasContainer = document.getElementById('canvas-container');
+                camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            }
+            
+            // Update status display
+            function updateStatus(message) {
+                console.log(message);
+            }
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Update mixer if it exists
+                if (mixer) {
+                    mixer.update(clock.getDelta());
+                }
+                
+                // Update character position
+                updateCharacterPosition();
+                
+                // Update controls
+                if (controls && controls.enabled) {
+                    controls.update();
+                }
+                
+                // Render scene
+                renderer.render(scene, camera);
+            }
+            
+            // Initialize the application
+            init();
+        });
+    </script>
+</body>
+</html>
