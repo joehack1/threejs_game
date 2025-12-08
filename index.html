@@ -1,167 +1,439 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Three.js Upgraded Game</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Three.js Action Game — Player Car vs Enemy Cars</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
-    #score {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      color: white;
-      font-size: 26px;
-      font-family: Arial;
-      z-index: 10;
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial}
+    #container{width:100%;height:100%;overflow:hidden;display:block}
+    canvas{display:block}
+    #hud{
+      position:fixed;left:12px;top:12px;color:#fff;z-index:10;pointer-events:none;
+      text-shadow:0 2px 6px rgba(0,0,0,.8);
     }
+    #hud .row{margin-bottom:6px}
+    #instructions{position:fixed;right:12px;top:12px;background:rgba(0,0,0,.45);color:#fff;padding:10px;border-radius:8px;z-index:10}
+    #startBtn{display:inline-block;padding:8px 12px;background:#1e90ff;border-radius:6px;color:#fff;cursor:pointer}
+    #overlay{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+    #miniMap{position:fixed;right:12px;bottom:12px;width:180px;height:120px;background:rgba(0,0,0,.35);border-radius:8px;padding:8px}
   </style>
 </head>
 <body>
-<div id="score">Score: 0</div>
+  <div id="container"></div>
+  <div id="hud">
+    <div class="row">Health: <span id="health">100</span></div>
+    <div class="row">Score: <span id="score">0</span></div>
+    <div class="row">Enemies: <span id="enemyCount">0</span></div>
+  </div>
+  <div id="instructions">
+    <div>Controls: <strong>WASD / Arrow keys</strong> to move — <strong>Mouse</strong> to aim, <strong>Left Click</strong> to shoot</div>
+    <div style="margin-top:8px">Press <span id="startBtn">Start Game</span> to begin</div>
+  </div>
+  <div id="miniMap"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
+  <!-- Three.js from CDN -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 
-<script>
-/* ------------------------------------------------------------------
-   SCENE + CAMERA + RENDERER
------------------------------------------------------------------- */
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+  <script>
+  // Three.js single-file action game
+  // Basic top-down third-person car shooter with procedurally placed buildings, moving enemy cars, lighting and simple weapons
 
-const camera = new THREE.PerspectiveCamera(
-  70,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-camera.position.set(0, 5, 15);
+  const container = document.getElementById('container');
+  const healthEl = document.getElementById('health');
+  const scoreEl = document.getElementById('score');
+  const enemyCountEl = document.getElementById('enemyCount');
+  const startBtn = document.getElementById('startBtn');
+  const miniMap = document.getElementById('miniMap');
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-document.body.appendChild(renderer.domElement);
+  let scene, camera, renderer, clock;
+  let player, playerBB;
+  let keys = {};
+  let bullets = [];
+  let enemies = [];
+  let buildings = [];
+  let lastSpawn = 0;
+  let score = 0;
+  let gameRunning = false;
+  let speed = 0;
+  let worldSize = 600;
 
-/* ------------------------------------------------------------------
-   FLOOR
------------------------------------------------------------------- */
-const floorGeo = new THREE.PlaneGeometry(20, 40);
-const floorMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
-const floor = new THREE.Mesh(floorGeo, floorMat);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
+  init();
 
-/* ------------------------------------------------------------------
-   LIGHTING
------------------------------------------------------------------- */
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambientLight);
+  function init(){
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x97c1ff, 0.0008);
 
-const spot = new THREE.SpotLight(0xffffff, 1.2);
-spot.position.set(0, 15, 10);
-spot.castShadow = true;
-scene.add(spot);
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 80, 120);
+    camera.lookAt(0,0,0);
 
-/* ------------------------------------------------------------------
-   PLAYER (3D cylinder)
------------------------------------------------------------------- */
-const playerGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.5, 32);
-const playerMat = new THREE.MeshPhongMaterial({ color: 0x00ffcc });
-const player = new THREE.Mesh(playerGeo, playerMat);
-player.castShadow = true;
-player.position.set(0, 1, 0);
-scene.add(player);
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
 
-let playerSpeed = 0;
-const MOVE_SPEED = 0.1;
+    clock = new THREE.Clock();
 
-/* ------------------------------------------------------------------
-   OBSTACLES (3D boxes)
------------------------------------------------------------------- */
-let obstacles = [];
-function spawnObstacle() {
-  const geo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-  const mat = new THREE.MeshPhongMaterial({ color: 0xff4444 });
-  const obs = new THREE.Mesh(geo, mat);
+    // Lights
+    const ambient = new THREE.HemisphereLight(0xbfd1ff, 0x404040, 0.6);
+    scene.add(ambient);
 
-  obs.castShadow = true;
-  obs.position.x = Math.random() * 10 - 5;
-  obs.position.y = 1;
-  obs.position.z = -15;
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(100, 200, 100);
+    sun.castShadow = true;
+    sun.shadow.camera.left = -400;
+    sun.shadow.camera.right = 400;
+    sun.shadow.camera.top = 400;
+    sun.shadow.camera.bottom = -400;
+    sun.shadow.mapSize.set(2048,2048);
+    scene.add(sun);
 
-  scene.add(obs);
-  obstacles.push(obs);
-}
-setInterval(spawnObstacle, 800);
+    // Ground
+    const groundMat = new THREE.MeshStandardMaterial({color:0x2a6a3b, roughness:0.9});
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(worldSize*2, worldSize*2), groundMat);
+    ground.rotation.x = -Math.PI/2;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-/* ------------------------------------------------------------------
-   INPUT HANDLING (smooth movement)
------------------------------------------------------------------- */
-document.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowLeft") playerSpeed = -MOVE_SPEED;
-  if (e.key === "ArrowRight") playerSpeed = MOVE_SPEED;
-});
-document.addEventListener("keyup", () => {
-  playerSpeed = 0;
-});
+    // Road network (simple cross)
+    const roadMat = new THREE.MeshStandardMaterial({color:0x222222, roughness:0.5});
+    const road1 = new THREE.Mesh(new THREE.BoxGeometry(worldSize*2,1,80), roadMat);
+    road1.position.set(0,0.51,0);
+    road1.receiveShadow = true;
+    scene.add(road1);
+    const road2 = new THREE.Mesh(new THREE.BoxGeometry(80,1,worldSize*2), roadMat);
+    road2.position.set(0,0.51,0);
+    road2.receiveShadow = true;
+    scene.add(road2);
 
-/* ------------------------------------------------------------------
-   COLLISION CHECK
------------------------------------------------------------------- */
-function collides(a, b) {
-  return (
-    Math.abs(a.position.x - b.position.x) < 1 &&
-    Math.abs(a.position.z - b.position.z) < 1
-  );
-}
+    // Buildings
+    createBuildings(60);
 
-/* ------------------------------------------------------------------
-   GAME LOOP
------------------------------------------------------------------- */
-let score = 0;
+    // Player
+    player = createCar(0x0fb0ff);
+    player.position.set(0,3,20);
+    scene.add(player);
+    playerBB = new THREE.Box3().setFromObject(player);
 
-function animate() {
-  requestAnimationFrame(animate);
+    // Camera follow offset
+    camera.position.set(0, 60, 110);
 
-  // Move player smoothly
-  player.position.x += playerSpeed;
+    // Input
+    window.addEventListener('keydown', e=>keys[e.code]=true);
+    window.addEventListener('keyup', e=>keys[e.code]=false);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
-  // Limit movement area
-  player.position.x = Math.max(-5, Math.min(5, player.position.x));
+    window.addEventListener('resize', onResize);
 
-  // Move obstacles
-  obstacles.forEach((obs, i) => {
-    obs.position.z += 0.12;
+    // Mini-map quick render
+    miniMap.innerHTML = '<div style="color:#fff;font-size:12px">Mini-map</div>';
 
-    // Check collision
-    if (collides(player, obs)) {
-      alert("GAME OVER! Score: " + score);
-      location.reload();
+    startBtn.addEventListener('click', () => {
+      if(!gameRunning) startGame();
+    });
+
+    render();
+  }
+
+  function startGame(){
+    // reset
+    bullets.length = 0; enemies.length = 0; score = 0; lastSpawn = 0; gameRunning = true; document.getElementById('instructions').style.display='none';
+    player.userData = {hp:100, fireCooldown:0};
+    healthEl.textContent = player.userData.hp;
+    scoreEl.textContent = score;
+    enemyCountEl.textContent = enemies.length;
+  }
+
+  function createCar(color){
+    const root = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(8,2.6,14), new THREE.MeshStandardMaterial({color}));
+    body.position.y = 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    root.add(body);
+
+    // cabin
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(6,1.6,6), new THREE.MeshStandardMaterial({color:0xeeeeee, metalness:0.2, roughness:0.4}));
+    cabin.position.set(0,3.1,0);
+    cabin.castShadow = true;
+    root.add(cabin);
+
+    // simple wheels
+    const wheelGeo = new THREE.CylinderGeometry(1.1,1.1,1.6,12);
+    wheelGeo.rotateZ(Math.PI/2);
+    const wheelMat = new THREE.MeshStandardMaterial({color:0x111111});
+    const offsets = [[3,-1,5],[ -3,-1,5],[3,-1,-5],[-3,-1,-5]];
+    offsets.forEach(o=>{
+      const w = new THREE.Mesh(wheelGeo, wheelMat);
+      w.position.set(o[0], o[1]+1, o[2]);
+      w.castShadow = true;
+      root.add(w);
+    });
+
+    root.userData = {isPlayer:false, speed:0};
+    return root;
+  }
+
+  function createBuildings(n){
+    for(let i=0;i<n;i++){
+      const w = 12 + Math.random()*40;
+      const h = 10 + Math.random()*80;
+      const d = 12 + Math.random()*40;
+      const bx = (Math.random()-0.5) * worldSize;
+      const bz = (Math.random()-0.5) * worldSize;
+
+      // keep buildings away from main roads
+      if(Math.abs(bx) < 120 && Math.abs(bz) < 120) {
+        i--; continue;
+      }
+
+      const mat = new THREE.MeshStandardMaterial({color:0xffffff * Math.random(), roughness:0.6, metalness:0.2});
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      b.position.set(bx, h/2, bz);
+      b.castShadow = true;
+      b.receiveShadow = true;
+      scene.add(b);
+      buildings.push(b);
+
+      // add simple windows as emissive dots by creating small planes
+      const windowCount = Math.floor((w/6) * (h/6));
+      for(let j=0;j<windowCount;j++){
+        if(Math.random()>0.65) continue;
+        const wx = (Math.random()-0.5) * (w-2);
+        const wz = (Math.random()-0.5) * (d-2);
+        const wh = 0.6 + Math.random()*0.8;
+        const ww = 0.6 + Math.random()*0.8;
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(ww,wh), new THREE.MeshBasicMaterial({color:0xfff3aa, side:THREE.DoubleSide, transparent:true, opacity:0.9}));
+        win.position.set(bx+wx, 1 + (Math.random()*h)-h/2 + h/2, bz + wz + (d/2 + 0.01) * (Math.random()>0.5?1:-1));
+        win.lookAt(win.position.x, win.position.y + 1, win.position.z + 1); // small angle
+        scene.add(win);
+      }
+    }
+  }
+
+  function onPointerDown(e){
+    if(!gameRunning) return;
+    shoot();
+  }
+
+  function shoot(){
+    const now = clock.getElapsedTime();
+    if(player.userData.fireCooldown > now) return;
+    player.userData.fireCooldown = now + 0.18; // fire rate
+
+    // bullet as small sphere
+    const bgeo = new THREE.SphereGeometry(0.6,8,8);
+    const bmat = new THREE.MeshStandardMaterial({emissive:0xffcc88, emissiveIntensity:1, metalness:0.2});
+    const bullet = new THREE.Mesh(bgeo, bmat);
+    bullet.position.copy(player.position).add(new THREE.Vector3(0,2.8,0));
+    bullet.quaternion.copy(player.quaternion);
+    bullet.userData = {vel: new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion).multiplyScalar(300), life:3, owner:'player'};
+    bullet.castShadow = true;
+    scene.add(bullet);
+    bullets.push(bullet);
+  }
+
+  function spawnEnemy(){
+    // spawn outside main area
+    const side = Math.random();
+    let x = (Math.random()-0.5) * worldSize;
+    let z = (Math.random()-0.5) * worldSize;
+    while(Math.abs(x) < 200 && Math.abs(z) < 200){ x = (Math.random()-0.5) * worldSize; z = (Math.random()-0.5) * worldSize; }
+
+    const enemy = createCar(0xff4040);
+    enemy.position.set(x,3,z);
+    enemy.userData = {isEnemy:true, hp: 30 + Math.floor(Math.random()*40), speed: 18 + Math.random()*18, state:'seek', fireTimer:0};
+    scene.add(enemy);
+    enemies.push(enemy);
+  }
+
+  function onResize(){
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  function updatePlayer(delta){
+    // Movement input
+    const forward = (keys['KeyW']||keys['ArrowUp'])?1:0;
+    const backward = (keys['KeyS']||keys['ArrowDown'])?1:0;
+    const left = (keys['KeyA']||keys['ArrowLeft'])?1:0;
+    const right = (keys['KeyD']||keys['ArrowRight'])?1:0;
+
+    const acc = 60;
+    if(forward) speed += acc * delta; else if(backward) speed -= acc * delta; else speed *= Math.pow(0.7, delta*60);
+    speed = Math.max(-60, Math.min(160, speed));
+
+    // steering
+    const turnSpeed = 1.6;
+    if(left) player.rotation.y += turnSpeed*delta*(speed>0?1:-1);
+    if(right) player.rotation.y -= turnSpeed*delta*(speed>0?1:-1);
+
+    // apply movement
+    const dir = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
+    player.position.add(dir.multiplyScalar(speed*delta));
+
+    // bound to world
+    player.position.x = Math.max(-worldSize, Math.min(worldSize, player.position.x));
+    player.position.z = Math.max(-worldSize, Math.min(worldSize, player.position.z));
+
+    // update camera to follow
+    const camTarget = player.position.clone().add(new THREE.Vector3(0,12,0));
+    camera.position.lerp(player.position.clone().add(new THREE.Vector3(0,80,120).applyQuaternion(player.quaternion)), 0.08);
+    camera.lookAt(camTarget);
+
+    // update bounding box
+    playerBB.setFromObject(player);
+  }
+
+  function updateBullets(dt){
+    for(let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      b.position.addScaledVector(b.userData.vel, dt);
+      b.userData.life -= dt;
+      if(b.userData.life <= 0) { scene.remove(b); bullets.splice(i,1); continue; }
+
+      // check collision with enemies
+      if(b.userData.owner === 'player'){
+        for(let j=enemies.length-1;j>=0;j--){
+          const e = enemies[j];
+          const ebb = new THREE.Box3().setFromObject(e);
+          if(ebb.containsPoint(b.position)){
+            e.userData.hp -= 12;
+            scene.remove(b);
+            bullets.splice(i,1);
+            if(e.userData.hp <= 0){
+              destroyEnemy(e, j);
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  function destroyEnemy(enemy, idx){
+    // explosion effect: scale and remove
+    score += 10;
+    scoreEl.textContent = score;
+
+    scene.remove(enemy);
+    enemies.splice(idx,1);
+  }
+
+  function updateEnemies(dt){
+    const playerPos = player.position.clone();
+    enemies.forEach((e,i)=>{
+      const dir = playerPos.clone().sub(e.position).normalize();
+      // rotate to face player
+      const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,-1), dir.clone().setY(0).normalize());
+      e.quaternion.slerp(targetQuat, 0.02);
+
+      // move
+      const move = dir.clone().multiplyScalar(e.userData.speed * dt * (e.userData.state === 'seek'?1:0.4));
+      e.position.add(move);
+
+      // enemy shooting occasionally
+      e.userData.fireTimer -= dt;
+      if(e.userData.fireTimer <= 0){
+        e.userData.fireTimer = 2 + Math.random()*3;
+        enemyShoot(e);
+      }
+
+      // check collision with player
+      const ebb = new THREE.Box3().setFromObject(e);
+      if(ebb.intersectsBox(playerBB)){
+        // damage player
+        player.userData.hp -= Math.ceil(10*dt);
+        healthEl.textContent = Math.max(0, Math.floor(player.userData.hp));
+        if(player.userData.hp <= 0){
+          endGame();
+        }
+      }
+    });
+    enemyCountEl.textContent = enemies.length;
+  }
+
+  function enemyShoot(enemy){
+    // shoot toward player
+    const bgeo = new THREE.SphereGeometry(0.7,8,8);
+    const bmat = new THREE.MeshStandardMaterial({emissive:0xff8888, emissiveIntensity:1});
+    const bullet = new THREE.Mesh(bgeo, bmat);
+    bullet.position.copy(enemy.position).add(new THREE.Vector3(0,2.4,0));
+    const dir = player.position.clone().sub(enemy.position).normalize();
+    bullet.userData = {vel: dir.multiplyScalar(180), life:4, owner:'enemy'};
+    scene.add(bullet);
+    bullets.push(bullet);
+  }
+
+  function checkBulletsHitPlayer(dt){
+    for(let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      if(b.userData.owner === 'enemy'){
+        // simple sphere-box test
+        if(playerBB.containsPoint(b.position)){
+          player.userData.hp -= 8;
+          healthEl.textContent = Math.max(0, Math.floor(player.userData.hp));
+          scene.remove(b);
+          bullets.splice(i,1);
+          if(player.userData.hp <= 0) endGame();
+        }
+      }
+    }
+  }
+
+  function maybeSpawnEnemy(time){
+    if(time - lastSpawn > Math.max(0.6, 4 - score/60)){
+      spawnEnemy(); lastSpawn = time;
+    }
+  }
+
+  function endGame(){
+    gameRunning = false;
+    document.getElementById('instructions').style.display='block';
+    document.getElementById('instructions').innerHTML = '<div style="color:#fff">Game Over — Score: '+score+'<br><div style="margin-top:8px"><span id="startBtn2" style="padding:8px 12px;background:#1e90ff;border-radius:6px;color:#fff;cursor:pointer">Restart</span></div></div>';
+    document.getElementById('startBtn2').addEventListener('click', ()=>location.reload());
+  }
+
+  function render(){
+    requestAnimationFrame(render);
+    const dt = Math.min(0.05, clock.getDelta());
+    const time = clock.getElapsedTime();
+
+    if(gameRunning){
+      updatePlayer(dt);
+      updateBullets(dt);
+      updateEnemies(dt);
+      checkBulletsHitPlayer(dt);
+      maybeSpawnEnemy(time);
     }
 
-    // Remove passed obstacle
-    if (obs.position.z > 10) {
-      scene.remove(obs);
-      obstacles.splice(i, 1);
-      score++;
-      document.getElementById("score").innerText = "Score: " + score;
-    }
-  });
+    // animate small things
+    buildings.forEach(b=>{ b.rotation.y += 0.0002; });
 
-  renderer.render(scene, camera);
-}
+    renderer.render(scene, camera);
+  }
 
-animate();
+  // simple collision creation for player box
+  (function createPlayerBB(){
+    // initial placeholder, will be updated in updatePlayer
+    playerBB = new THREE.Box3(new THREE.Vector3(-4,-2,-7), new THREE.Vector3(4,6,7));
+  })();
 
-/* ------------------------------------------------------------------
-   RESIZE
------------------------------------------------------------------- */
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-</script>
+  // resize handled
 
+  // Debug helper: show simple mini map as text of positions (very lightweight)
+  setInterval(()=>{
+    if(!gameRunning) return;
+    // draw a tiny ASCII like map of objects
+    const px = Math.round(player.position.x);
+    const pz = Math.round(player.position.z);
+    let txt = '<div style="color:#fff;font-size:12px">Player: '+px+','+pz+'<br>Enemies: '+enemies.length+'<br>Score: '+score+'</div>';
+    miniMap.innerHTML = txt;
+  }, 400);
+
+  </script>
 </body>
 </html>

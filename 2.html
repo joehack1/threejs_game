@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CRYOGENIC STRIKE - 3D Action Game</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { 
+            font-family: Arial, sans-serif; 
+            overflow: hidden;
+            background: #000;
+        }
+        #gameContainer { width: 100%; height: 100vh; }
+        #hud { 
+            position: absolute; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .hud-panel {
+            background: rgba(0, 0, 50, 0.7);
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            padding: 10px;
+            color: white;
+            position: absolute;
+        }
+        #healthPanel { top: 20px; left: 20px; width: 200px; }
+        #weaponPanel { bottom: 20px; left: 20px; width: 250px; }
+        #missionPanel { top: 20px; right: 20px; width: 200px; }
+        #scorePanel { top: 200px; right: 20px; width: 200px; }
+        .bar-container {
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+        .bar-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        #healthBar { background: linear-gradient(to right, #ff0000, #00ff00); }
+        #ammoBar { background: linear-gradient(to right, #ff9900, #ffff00); }
+        .menu {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,50,0.9);
+            border: 3px solid #00ffff;
+            border-radius: 15px;
+            padding: 30px;
+            color: white;
+            text-align: center;
+            z-index: 1000;
+        }
+        .menu button {
+            background: #0066cc;
+            border: 2px solid #00ffff;
+            color: white;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .menu button:hover {
+            background: #0088ff;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px; height: 20px;
+            pointer-events: none;
+            z-index: 150;
+        }
+        .crosshair-dot {
+            width: 4px; height: 4px;
+            background: #00ffff;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ffff;
+            font-size: 24px;
+            z-index: 10000;
+            background: rgba(0,0,0,0.8);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer"></div>
+    
+    <div id="hud">
+        <div id="healthPanel" class="hud-panel">
+            <h3>SUB-ZERO</h3>
+            <div>HEALTH: <span id="healthText">100</span></div>
+            <div class="bar-container"><div id="healthBar" class="bar-fill" style="width:100%"></div></div>
+            <div>AMMO: <span id="ammoText">30/120</span></div>
+            <div class="bar-container"><div id="ammoBar" class="bar-fill" style="width:25%"></div></div>
+            <div>SCORE: <span id="scoreText">0</span></div>
+        </div>
+        
+        <div id="weaponPanel" class="hud-panel">
+            <h3>CRYO-PULSE RIFLE</h3>
+            <div>Damage: 25</div>
+            <div>Fire Rate: 600 RPM</div>
+            <div>Special: FREEZE BLAST (F)</div>
+        </div>
+        
+        <div id="missionPanel" class="hud-panel">
+            <h3>MISSION</h3>
+            <div>Enemies: <span id="enemyCount">10</span></div>
+            <div>Time: <span id="timeText">00:00</span></div>
+            <div>Status: <span id="statusText">ACTIVE</span></div>
+        </div>
+        
+        <div id="scorePanel" class="hud-panel">
+            <h3>STATS</h3>
+            <div>Kills: <span id="killsText">0</span></div>
+            <div>Accuracy: <span id="accuracyText">0%</span></div>
+            <div>Combo: <span id="comboText">0x</span></div>
+        </div>
+        
+        <div id="crosshair">
+            <div class="crosshair-dot"></div>
+        </div>
+    </div>
+    
+    <div id="mainMenu" class="menu">
+        <h1>CRYOGENIC STRIKE</h1>
+        <p>Sub-Zero themed action game</p>
+        <button onclick="startGame()">START GAME</button>
+        <button onclick="showControls()">CONTROLS</button>
+        <button onclick="showSettings()">SETTINGS</button>
+    </div>
+    
+    <div id="loading" style="display:none;">
+        <div>LOADING GAME...</div>
+        <div style="margin-top:20px;" id="loadingText">0%</div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.module.js';
+
+        // Game Variables
+        let scene, camera, renderer;
+        let player, enemies = [], bullets = [];
+        let keys = {};
+        let mouse = { x: 0, y: 0 };
+        let score = 0, kills = 0, shotsFired = 0, shotsHit = 0;
+        let gameTime = 0;
+        let gameState = 'menu'; // menu, playing, gameover
+        let playerHealth = 100, playerAmmo = 30, maxAmmo = 120;
+        let enemyCount = 10;
+
+        // Initialize the game
+        function init() {
+            console.log("Initializing game...");
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x001122);
+            scene.fog = new THREE.Fog(0x001122, 10, 100);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 10, 20);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('gameContainer').appendChild(renderer.domElement);
+            
+            // Setup lighting
+            setupLighting();
+            
+            // Create world
+            createWorld();
+            
+            // Create player
+            createPlayer();
+            
+            // Create enemies
+            createEnemies();
+            
+            // Setup event listeners
+            setupEventListeners();
+            
+            // Hide menu, start game immediately for testing
+            setTimeout(() => {
+                document.getElementById('mainMenu').style.display = 'none';
+                startGame();
+            }, 100);
+            
+            // Start animation loop
+            animate();
+        }
+
+        function setupLighting() {
+            // Ambient light
+            const ambient = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambient);
+            
+            // Directional light
+            const directional = new THREE.DirectionalLight(0xffffff, 1);
+            directional.position.set(50, 100, 50);
+            directional.castShadow = true;
+            scene.add(directional);
+            
+            // Blue cryo light
+            const cryoLight = new THREE.PointLight(0x00ffff, 0.5, 100);
+            cryoLight.position.set(0, 20, 0);
+            scene.add(cryoLight);
+        }
+
+        function createWorld() {
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(200, 200);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a2e,
+                roughness: 0.8
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Add some buildings
+            for (let i = 0; i < 5; i++) {
+                const size = 5 + Math.random() * 10;
+                const buildingGeometry = new THREE.BoxGeometry(size, size * 3, size);
+                const buildingMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x333344,
+                    roughness: 0.7
+                });
+                const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                building.position.set(
+                    (Math.random() - 0.5) * 150,
+                    size * 1.5,
+                    (Math.random() - 0.5) * 150
+                );
+                building.castShadow = true;
+                building.receiveShadow = true;
+                scene.add(building);
+            }
+            
+            // Add some vehicles
+            for (let i = 0; i < 3; i++) {
+                createVehicle(
+                    (Math.random() - 0.5) * 100,
+                    1,
+                    (Math.random() - 0.5) * 100
+                );
+            }
+        }
+
+        function createVehicle(x, y, z) {
+            const group = new THREE.Group();
+            
+            // Car body
+            const bodyGeometry = new THREE.BoxGeometry(3, 1, 5);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xff0000,
+                metalness: 0.5
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            group.add(body);
+            
+            // Wheels
+            const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 8);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x111111,
+                metalness: 0.8
+            });
+            
+            const wheelPositions = [
+                [1, -0.5, 2],
+                [-1, -0.5, 2],
+                [1, -0.5, -2],
+                [-1, -0.5, -2]
+            ];
+            
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.position.set(pos[0], pos[1], pos[2]);
+                wheel.rotation.z = Math.PI / 2;
+                group.add(wheel);
+            });
+            
+            group.position.set(x, y, z);
+            scene.add(group);
+        }
+
+        function createPlayer() {
+            player = new THREE.Group();
+            
+            // Sub-Zero body
+            const bodyGeometry = new THREE.BoxGeometry(1, 2, 0.5);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x003366,
+                metalness: 0.7
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            body.position.y = 1;
+            player.add(body);
+            
+            // Head (smaller for Sub-Zero)
+            const headGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+            const headMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x001133
+            });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 2.3;
+            player.add(head);
+            
+            // Mask
+            const maskGeometry = new THREE.BoxGeometry(0.4, 0.1, 0.05);
+            const maskMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x000000,
+                metalness: 0.9
+            });
+            const mask = new THREE.Mesh(maskGeometry, maskMaterial);
+            mask.position.set(0, 2.3, 0.2);
+            player.add(mask);
+            
+            // Cryo gauntlets
+            const gauntletGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.5, 8);
+            const gauntletMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x00ffff,
+                emissive: 0x0066ff,
+                emissiveIntensity: 0.3
+            });
+            
+            const leftGauntlet = new THREE.Mesh(gauntletGeometry, gauntletMaterial);
+            leftGauntlet.position.set(-0.6, 2, 0);
+            leftGauntlet.rotation.z = Math.PI / 2;
+            player.add(leftGauntlet);
+            
+            const rightGauntlet = new THREE.Mesh(gauntletGeometry, gauntletMaterial);
+            rightGauntlet.position.set(0.6, 2, 0);
+            rightGauntlet.rotation.z = Math.PI / 2;
+            player.add(rightGauntlet);
+            
+            player.position.y = 2;
+            scene.add(player);
+        }
+
+        function createEnemies() {
+            for (let i = 0; i < enemyCount; i++) {
+                const enemy = new THREE.Group();
+                
+                // Enemy body
+                const bodyGeometry = new THREE.BoxGeometry(1, 2, 0.5);
+                const bodyMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xff0000,
+                    metalness: 0.5
+                });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.castShadow = true;
+                body.position.y = 1;
+                enemy.add(body);
+                
+                // Enemy head
+                const headGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+                const headMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xcc0000
+                });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.y = 2.3;
+                enemy.add(head);
+                
+                enemy.position.set(
+                    (Math.random() - 0.5) * 100,
+                    2,
+                    (Math.random() - 0.5) * 100
+                );
+                
+                enemy.userData = {
+                    health: 100,
+                    type: 'enemy',
+                    speed: 0.5 + Math.random() * 1
+                };
+                
+                enemies.push(enemy);
+                scene.add(enemy);
+            }
+        }
+
+        function setupEventListeners() {
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+                
+                if (e.key === ' ') { // Space to shoot
+                    shoot();
+                }
+                if (e.key === 'r') { // R to reload
+                    reload();
+                }
+                if (e.key === 'f') { // F for freeze blast
+                    freezeBlast();
+                }
+                if (e.key === 'Escape') { // ESC for menu
+                    toggleMenu();
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+            
+            // Mouse controls
+            document.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && gameState === 'playing') {
+                    shoot();
+                }
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            });
+            
+            // Window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Click to play
+            renderer.domElement.addEventListener('click', () => {
+                if (gameState === 'menu') {
+                    startGame();
+                }
+            });
+        }
+
+        function updatePlayer(deltaTime) {
+            if (gameState !== 'playing') return;
+            
+            const speed = 10;
+            const move = new THREE.Vector3();
+            
+            if (keys['w'] || keys['arrowup']) move.z -= speed * deltaTime;
+            if (keys['s'] || keys['arrowdown']) move.z += speed * deltaTime;
+            if (keys['a'] || keys['arrowleft']) move.x -= speed * deltaTime;
+            if (keys['d'] || keys['arrowright']) move.x += speed * deltaTime;
+            
+            player.position.add(move);
+            
+            // Keep player in bounds
+            player.position.x = Math.max(-90, Math.min(90, player.position.x));
+            player.position.z = Math.max(-90, Math.min(90, player.position.z));
+            
+            // Update camera to follow player
+            camera.position.x = player.position.x;
+            camera.position.z = player.position.z + 20;
+            camera.lookAt(player.position.x, player.position.y + 2, player.position.z);
+        }
+
+        function updateEnemies(deltaTime) {
+            enemies.forEach((enemy, index) => {
+                if (!enemy.userData || enemy.userData.health <= 0) return;
+                
+                // Move toward player
+                const direction = new THREE.Vector3()
+                    .subVectors(player.position, enemy.position)
+                    .normalize();
+                
+                enemy.position.add(direction.multiplyScalar(enemy.userData.speed * deltaTime));
+                enemy.lookAt(player.position);
+                
+                // Check distance to player for damage
+                const distance = enemy.position.distanceTo(player.position);
+                if (distance < 3) {
+                    playerHealth -= 10 * deltaTime;
+                    updateUI();
+                    
+                    if (playerHealth <= 0) {
+                        gameOver();
+                    }
+                }
+                
+                // Remove dead enemies
+                if (enemy.userData.health <= 0) {
+                    scene.remove(enemy);
+                    enemies.splice(index, 1);
+                    kills++;
+                    enemyCount--;
+                    score += 100;
+                    updateUI();
+                    
+                    if (enemyCount <= 0) {
+                        victory();
+                    }
+                }
+            });
+        }
+
+        function updateBullets(deltaTime) {
+            bullets.forEach((bullet, index) => {
+                bullet.position.add(bullet.userData.velocity.clone().multiplyScalar(deltaTime * 50));
+                bullet.userData.distance += bullet.userData.velocity.length() * deltaTime * 50;
+                
+                // Check collision with enemies
+                let hit = false;
+                enemies.forEach(enemy => {
+                    if (enemy.userData.health > 0 && 
+                        bullet.position.distanceTo(enemy.position) < 1.5) {
+                        enemy.userData.health -= 25;
+                        hit = true;
+                        shotsHit++;
+                        
+                        // Create hit effect
+                        createHitEffect(enemy.position);
+                    }
+                });
+                
+                // Remove bullet if hit or too far
+                if (hit || bullet.userData.distance > 100) {
+                    scene.remove(bullet);
+                    bullets.splice(index, 1);
+                }
+            });
+        }
+
+        function shoot() {
+            if (gameState !== 'playing' || playerAmmo <= 0) return;
+            
+            playerAmmo--;
+            shotsFired++;
+            
+            // Create bullet
+            const bulletGeometry = new THREE.SphereGeometry(0.1, 4, 4);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            
+            bullet.position.copy(player.position);
+            bullet.position.y += 2;
+            
+            // Shoot direction (toward center of screen)
+            const direction = new THREE.Vector3(0, 0, -1);
+            bullet.userData = {
+                velocity: direction,
+                damage: 25,
+                distance: 0
+            };
+            
+            bullets.push(bullet);
+            scene.add(bullet);
+            
+            // Update UI
+            updateUI();
+            
+            // Recoil effect
+            camera.position.x += (Math.random() - 0.5) * 0.1;
+            camera.position.y += (Math.random() - 0.5) * 0.1;
+        }
+
+        function reload() {
+            if (gameState !== 'playing') return;
+            
+            const needed = maxAmmo - playerAmmo;
+            playerAmmo = maxAmmo;
+            updateUI();
+            console.log(`Reloaded ${needed} rounds`);
+        }
+
+        function freezeBlast() {
+            if (gameState !== 'playing') return;
+            
+            // Create freeze effect
+            const blastGeometry = new THREE.SphereGeometry(10, 16, 16);
+            const blastMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.3,
+                wireframe: true
+            });
+            const blast = new THREE.Mesh(blastGeometry, blastMaterial);
+            blast.position.copy(player.position);
+            scene.add(blast);
+            
+            // Damage enemies in range
+            enemies.forEach(enemy => {
+                const distance = enemy.position.distanceTo(player.position);
+                if (distance < 10) {
+                    enemy.userData.health -= 50;
+                }
+            });
+            
+            // Remove blast effect
+            setTimeout(() => {
+                scene.remove(blast);
+            }, 500);
+        }
+
+        function createHitEffect(position) {
+            const particles = 5;
+            for (let i = 0; i < particles; i++) {
+                const particleGeometry = new THREE.SphereGeometry(0.05, 3, 3);
+                const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                
+                particle.position.copy(position);
+                particle.userData = {
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 5,
+                        Math.random() * 5,
+                        (Math.random() - 0.5) * 5
+                    ),
+                    lifetime: 1
+                };
+                
+                scene.add(particle);
+                
+                // Remove particle after lifetime
+                setTimeout(() => {
+                    scene.remove(particle);
+                }, 1000);
+            }
+        }
+
+        function updateUI() {
+            // Update health
+            const healthPercent = (playerHealth / 100) * 100;
+            document.getElementById('healthText').textContent = Math.round(playerHealth);
+            document.getElementById('healthBar').style.width = healthPercent + '%';
+            
+            // Update ammo
+            const ammoPercent = (playerAmmo / maxAmmo) * 100;
+            document.getElementById('ammoText').textContent = `${playerAmmo}/${maxAmmo}`;
+            document.getElementById('ammoBar').style.width = ammoPercent + '%';
+            
+            // Update score
+            document.getElementById('scoreText').textContent = score;
+            
+            // Update enemy count
+            document.getElementById('enemyCount').textContent = enemyCount;
+            
+            // Update kills
+            document.getElementById('killsText').textContent = kills;
+            
+            // Update accuracy
+            const accuracy = shotsFired > 0 ? Math.round((shotsHit / shotsFired) * 100) : 0;
+            document.getElementById('accuracyText').textContent = accuracy + '%';
+            
+            // Update combo (simple version)
+            document.getElementById('comboText').textContent = kills + 'x';
+            
+            // Update time
+            const minutes = Math.floor(gameTime / 60);
+            const seconds = Math.floor(gameTime % 60);
+            document.getElementById('timeText').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function startGame() {
+            console.log("Starting game...");
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            gameState = 'playing';
+            
+            // Reset game state
+            playerHealth = 100;
+            playerAmmo = 30;
+            score = 0;
+            kills = 0;
+            shotsFired = 0;
+            shotsHit = 0;
+            gameTime = 0;
+            enemyCount = 10;
+            
+            // Reset player position
+            player.position.set(0, 2, 0);
+            
+            // Clear existing enemies and bullets
+            enemies.forEach(enemy => scene.remove(enemy));
+            enemies = [];
+            bullets.forEach(bullet => scene.remove(bullet));
+            bullets = [];
+            
+            // Create new enemies
+            createEnemies();
+            
+            // Update UI
+            updateUI();
+            
+            document.getElementById('statusText').textContent = 'ACTIVE';
+            document.getElementById('statusText').style.color = '#00ff00';
+        }
+
+        function gameOver() {
+            gameState = 'gameover';
+            document.getElementById('statusText').textContent = 'GAME OVER';
+            document.getElementById('statusText').style.color = '#ff0000';
+            
+            setTimeout(() => {
+                alert(`GAME OVER\n\nScore: ${score}\nKills: ${kills}\nTime: ${Math.floor(gameTime)}s`);
+                document.getElementById('mainMenu').style.display = 'block';
+            }, 1000);
+        }
+
+        function victory() {
+            gameState = 'victory';
+            document.getElementById('statusText').textContent = 'MISSION COMPLETE';
+            document.getElementById('statusText').style.color = '#00ff00';
+            
+            const finalScore = score + Math.max(0, 300 - gameTime) * 10;
+            
+            setTimeout(() => {
+                alert(`MISSION COMPLETE!\n\nFinal Score: ${finalScore}\nKills: ${kills}\nTime: ${Math.floor(gameTime)}s\nAccuracy: ${Math.round(shotsHit / Math.max(1, shotsFired) * 100)}%`);
+                document.getElementById('mainMenu').style.display = 'block';
+            }, 1000);
+        }
+
+        function toggleMenu() {
+            if (gameState === 'playing') {
+                gameState = 'menu';
+                document.getElementById('mainMenu').style.display = 'block';
+            } else if (gameState === 'menu') {
+                gameState = 'playing';
+                document.getElementById('mainMenu').style.display = 'none';
+            }
+        }
+
+        function showControls() {
+            alert(`CONTROLS:\n\nWASD - Move\nMouse - Aim\nLeft Click - Shoot\nR - Reload\nF - Freeze Blast\nESC - Menu`);
+        }
+
+        function showSettings() {
+            alert("Settings panel would go here");
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = 0.016; // Approximate 60fps
+            
+            if (gameState === 'playing') {
+                gameTime += deltaTime;
+                
+                updatePlayer(deltaTime);
+                updateEnemies(deltaTime);
+                updateBullets(deltaTime);
+                updateUI();
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Start the game
+        init();
+    </script>
+</body>
+</html>

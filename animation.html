@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Three.js - Skeletal Animation Demo</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        
+        #container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+        }
+        
+        #info a {
+            color: #f00;
+            pointer-events: auto;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 300px;
+            z-index: 100;
+            color: white;
+        }
+        
+        #controls h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        #controls div {
+            margin: 5px 0;
+        }
+        
+        .button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        
+        .button:hover {
+            background: #45a049;
+        }
+        
+        .slider-container {
+            margin: 10px 0;
+        }
+        
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        .checkbox-container {
+            margin: 10px 0;
+        }
+        
+        .checkbox-container label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .checkbox-container input {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="info">
+        Three.js - Skeletal Animation Demo<br>
+        Use the controls below to animate the character
+    </div>
+    <div id="loading">Loading 3D Model and Animations...</div>
+    
+    <div id="controls" style="display: none;">
+        <h3>Animation Controls</h3>
+        
+        <div class="slider-container">
+            <label>Idle Weight: <span id="idleWeightValue">0.0</span></label>
+            <input type="range" id="idleWeight" min="0" max="1" step="0.01" value="0">
+        </div>
+        
+        <div class="slider-container">
+            <label>Walk Weight: <span id="walkWeightValue">1.0</span></label>
+            <input type="range" id="walkWeight" min="0" max="1" step="0.01" value="1">
+        </div>
+        
+        <div class="slider-container">
+            <label>Run Weight: <span id="runWeightValue">0.0</span></label>
+            <input type="range" id="runWeight" min="0" max="1" step="0.01" value="0">
+        </div>
+        
+        <div>
+            <button class="button" id="toIdle">Walk → Idle</button>
+            <button class="button" id="toWalk">Idle → Walk</button>
+        </div>
+        
+        <div>
+            <button class="button" id="toRun">Walk → Run</button>
+            <button class="button" id="toWalkFromRun">Run → Walk</button>
+        </div>
+        
+        <div class="slider-container">
+            <label>Animation Speed: <span id="speedValue">1.0</span></label>
+            <input type="range" id="speed" min="0" max="2" step="0.1" value="1">
+        </div>
+        
+        <div class="checkbox-container">
+            <label>
+                <input type="checkbox" id="showSkeleton"> Show Skeleton
+            </label>
+        </div>
+        
+        <div>
+            <button class="button" id="resetCamera">Reset Camera</button>
+            <button class="button" id="togglePlay">Pause/Play</button>
+        </div>
+    </div>
+
+    <script>
+        // Import maps for ES modules (compatible with most modern browsers)
+        const importMap = document.createElement('script');
+        importMap.type = 'importmap';
+        importMap.textContent = JSON.stringify({
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.156.1/examples/jsm/"
+            }
+        });
+        document.head.appendChild(importMap);
+    </script>
+
+    <script type="module">
+        // Import Three.js modules
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.156.1/examples/jsm/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.156.1/examples/jsm/controls/OrbitControls.js';
+
+        // Scene setup
+        let scene, renderer, camera, controls, stats;
+        let model, skeleton, mixer, clock;
+        let idleAction, walkAction, runAction;
+        let actions = [];
+        let currentAnimation = 'walk';
+        let isPlaying = true;
+
+        // Animation weights
+        let idleWeight = 0;
+        let walkWeight = 1;
+        let runWeight = 0;
+
+        // Crossfade duration
+        const crossfadeDuration = 0.5;
+
+        // Initialize the scene
+        init();
+
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa0a0a0);
+            scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(2, 2, -4);
+            camera.lookAt(0, 1, 0);
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Add orbit controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 1, 0);
+            controls.update();
+
+            // Add lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 1.5);
+            hemiLight.position.set(0, 20, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+            dirLight.position.set(-3, 10, -10);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 2;
+            dirLight.shadow.camera.bottom = -2;
+            dirLight.shadow.camera.left = -2;
+            dirLight.shadow.camera.right = 2;
+            dirLight.shadow.camera.near = 0.1;
+            dirLight.shadow.camera.far = 40;
+            scene.add(dirLight);
+
+            // Create ground
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x888888,
+                depthWrite: false
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Add a grid helper
+            const gridHelper = new THREE.GridHelper(100, 20, 0x000000, 0x000000);
+            gridHelper.material.opacity = 0.2;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+
+            // Initialize clock for animations
+            clock = new THREE.Clock();
+
+            // Load the 3D model
+            loadModel();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+
+            // Setup UI controls
+            setupControls();
+
+            // Start animation loop
+            animate();
+        }
+
+        // Create a simple humanoid model with skeletal animations
+        function createSimpleCharacter() {
+            const group = new THREE.Group();
+
+            // Create skeleton bones
+            const bones = [];
+            
+            // Root bone
+            const rootBone = new THREE.Bone();
+            bones.push(rootBone);
+            
+            // Spine bones
+            const spineBone = new THREE.Bone();
+            spineBone.position.y = 1;
+            rootBone.add(spineBone);
+            bones.push(spineBone);
+            
+            const chestBone = new THREE.Bone();
+            chestBone.position.y = 0.5;
+            spineBone.add(chestBone);
+            bones.push(chestBone);
+            
+            // Head bone
+            const headBone = new THREE.Bone();
+            headBone.position.y = 0.3;
+            chestBone.add(headBone);
+            bones.push(headBone);
+            
+            // Arm bones
+            const leftShoulder = new THREE.Bone();
+            leftShoulder.position.set(0.3, 0, 0);
+            chestBone.add(leftShoulder);
+            bones.push(leftShoulder);
+            
+            const leftArm = new THREE.Bone();
+            leftArm.position.set(0.3, 0, 0);
+            leftShoulder.add(leftArm);
+            bones.push(leftArm);
+            
+            const rightShoulder = new THREE.Bone();
+            rightShoulder.position.set(-0.3, 0, 0);
+            chestBone.add(rightShoulder);
+            bones.push(rightShoulder);
+            
+            const rightArm = new THREE.Bone();
+            rightArm.position.set(-0.3, 0, 0);
+            rightShoulder.add(rightArm);
+            bones.push(rightArm);
+            
+            // Leg bones
+            const leftHip = new THREE.Bone();
+            leftHip.position.set(0.2, -0.5, 0);
+            spineBone.add(leftHip);
+            bones.push(leftHip);
+            
+            const leftLeg = new THREE.Bone();
+            leftLeg.position.set(0, -1, 0);
+            leftHip.add(leftLeg);
+            bones.push(leftLeg);
+            
+            const rightHip = new THREE.Bone();
+            rightHip.position.set(-0.2, -0.5, 0);
+            spineBone.add(rightHip);
+            bones.push(rightHip);
+            
+            const rightLeg = new THREE.Bone();
+            rightLeg.position.set(0, -1, 0);
+            rightHip.add(rightLeg);
+            bones.push(rightLeg);
+
+            // Create skeleton
+            const skeleton = new THREE.Skeleton(bones);
+            
+            // Create geometry with skinning
+            const geometry = createSkinnedGeometry(skeleton);
+            
+            // Create material
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x1565c0,
+                skinning: true,
+                side: THREE.DoubleSide
+            });
+            
+            // Create skinned mesh
+            const mesh = new THREE.SkinnedMesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            // Bind skeleton to mesh
+            mesh.add(rootBone);
+            mesh.bind(skeleton);
+            
+            group.add(mesh);
+            
+            return { group, skeleton, bones };
+        }
+
+        function createSkinnedGeometry(skeleton) {
+            const geometry = new THREE.BufferGeometry();
+            
+            // Create vertices for a simple humanoid shape
+            const vertices = [];
+            const indices = [];
+            const skinIndices = [];
+            const skinWeights = [];
+            
+            // Create body segments
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 0, 0, 1, 0.3, 0.5, 1.5); // Torso
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 1, 0, 2.5, 0.25, 0.25, 0.5); // Head
+            
+            // Arms
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 2, 0.3, 2, 0.1, 0.1, 0.8); // Left upper arm
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 3, -0.3, 2, 0.1, 0.1, 0.8); // Right upper arm
+            
+            // Legs
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 4, 0.15, 0.5, 0.15, 0.15, 1); // Left upper leg
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 5, -0.15, 0.5, 0.15, 0.15, 1); // Right upper leg
+            createBodySegment(vertices, indices, skinIndices, skinWeights, 6, 0.15, -0.5, 0.12, 0.12, 0.8); // Left lower leg
+            createBodySegment(vertices, indices, skinWeights, 7, -0.15, -0.5, 0.12, 0.12, 0.8); // Right lower leg
+
+            // Set geometry attributes
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+            geometry.setIndex(indices);
+            
+            geometry.computeVertexNormals();
+            
+            return geometry;
+        }
+
+        function createBodySegment(vertices, indices, skinIndices, skinWeights, boneIndex, x, y, width, depth, height) {
+            const halfWidth = width / 2;
+            const halfDepth = depth / 2;
+            const halfHeight = height / 2;
+            
+            const startIndex = vertices.length / 3;
+            
+            // Create 8 vertices for a box
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    for (let k = 0; k < 2; k++) {
+                        vertices.push(
+                            x + (i - 0.5) * width,
+                            y + (j - 0.5) * height,
+                            (k - 0.5) * depth
+                        );
+                        
+                        // Assign to the specified bone
+                        skinIndices.push(boneIndex, 0, 0, 0);
+                        skinWeights.push(1, 0, 0, 0);
+                    }
+                }
+            }
+            
+            // Create indices for the box
+            const boxIndices = [
+                startIndex, startIndex + 1, startIndex + 3,
+                startIndex, startIndex + 3, startIndex + 2,
+                startIndex + 4, startIndex + 5, startIndex + 7,
+                startIndex + 4, startIndex + 7, startIndex + 6,
+                startIndex, startIndex + 1, startIndex + 5,
+                startIndex, startIndex + 5, startIndex + 4,
+                startIndex + 2, startIndex + 3, startIndex + 7,
+                startIndex + 2, startIndex + 7, startIndex + 6,
+                startIndex, startIndex + 2, startIndex + 6,
+                startIndex, startIndex + 6, startIndex + 4,
+                startIndex + 1, startIndex + 3, startIndex + 7,
+                startIndex + 1, startIndex + 7, startIndex + 5
+            ];
+            
+            indices.push(...boxIndices);
+        }
+
+        function loadModel() {
+            // Try to load a GLTF model, fallback to procedural model if not available
+            const loader = new GLTFLoader();
+            
+            // Try loading from a public GLTF model
+            loader.load(
+                'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r156/examples/models/gltf/RobotExpressive/RobotExpressive.glb',
+                function(gltf) {
+                    model = gltf.scene;
+                    setupModel(gltf);
+                },
+                function(xhr) {
+                    console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                },
+                function(error) {
+                    console.error('Failed to load GLTF model, creating procedural model:', error);
+                    createProceduralModel();
+                }
+            );
+        }
+
+        function createProceduralModel() {
+            // Create a procedural character
+            const character = createSimpleCharacter();
+            model = character.group;
+            skeleton = character.skeleton;
+            
+            scene.add(model);
+            
+            // Create skeleton helper
+            const skeletonHelper = new THREE.SkeletonHelper(model);
+            skeletonHelper.visible = false;
+            scene.add(skeletonHelper);
+            
+            // Create mixer and animations
+            mixer = new THREE.AnimationMixer(model);
+            
+            // Create procedural animations
+            createProceduralAnimations(mixer, character.bones);
+            
+            // Hide loading screen and show controls
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('controls').style.display = 'block';
+        }
+
+        function setupModel(gltf) {
+            model = gltf.scene;
+            scene.add(model);
+
+            // Enable shadows
+            model.traverse(function(object) {
+                if (object.isMesh) {
+                    object.castShadow = true;
+                    object.receiveShadow = true;
+                }
+            });
+
+            // Create skeleton helper
+            skeleton = new THREE.SkeletonHelper(model);
+            skeleton.visible = false;
+            scene.add(skeleton);
+
+            // Create animation mixer
+            mixer = new THREE.AnimationMixer(model);
+
+            // Get animations from the model
+            const animations = gltf.animations;
+            
+            if (animations && animations.length > 0) {
+                // Try to find common animation names
+                let idleClip, walkClip, runClip;
+                
+                for (const clip of animations) {
+                    const name = clip.name.toLowerCase();
+                    if (name.includes('idle')) idleClip = clip;
+                    if (name.includes('walk')) walkClip = clip;
+                    if (name.includes('run')) runClip = clip;
+                }
+                
+                // Use available animations
+                idleAction = idleClip ? mixer.clipAction(idleClip) : null;
+                walkAction = walkClip ? mixer.clipAction(walkClip) : null;
+                runAction = runClip ? mixer.clipAction(runClip) : null;
+                
+                // Fallback to first animations if specific ones not found
+                if (!idleAction && animations.length > 0) idleAction = mixer.clipAction(animations[0]);
+                if (!walkAction && animations.length > 1) walkAction = mixer.clipAction(animations[1]);
+                if (!runAction && animations.length > 2) runAction = mixer.clipAction(animations[2]);
+                
+                // Filter out null actions
+                actions = [idleAction, walkAction, runAction].filter(action => action !== null);
+                
+                // Activate all actions
+                activateAllActions();
+            } else {
+                // Create procedural animations if no baked animations
+                console.log('No animations found in model, creating procedural animations');
+                createProceduralAnimationsForGLTF(model);
+            }
+
+            // Hide loading screen and show controls
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('controls').style.display = 'block';
+        }
+
+        function createProceduralAnimations(mixer, bones) {
+            // Create idle animation (subtle breathing)
+            const idleTracks = [];
+            
+            // Spine slight movement
+            idleTracks.push(
+                createRotationTrack(bones[1], 'y', [
+                    { time: 0, value: 0 },
+                    { time: 2, value: 0.05 },
+                    { time: 4, value: 0 }
+                ])
+            );
+            
+            // Arms slight movement
+            idleTracks.push(
+                createRotationTrack(bones[5], 'x', [
+                    { time: 0, value: -0.1 },
+                    { time: 2, value: -0.15 },
+                    { time: 4, value: -0.1 }
+                ])
+            );
+            
+            idleTracks.push(
+                createRotationTrack(bones[7], 'x', [
+                    { time: 0, value: -0.1 },
+                    { time: 2, value: -0.15 },
+                    { time: 4, value: -0.1 }
+                ])
+            );
+            
+            const idleClip = new THREE.AnimationClip('idle', 4, idleTracks);
+            
+            // Create walk animation
+            const walkTracks = [];
+            
+            // Leg movement
+            walkTracks.push(
+                createRotationTrack(bones[8], 'x', [
+                    { time: 0, value: 0.5 },
+                    { time: 0.5, value: -0.5 },
+                    { time: 1, value: 0.5 }
+                ])
+            );
+            
+            walkTracks.push(
+                createRotationTrack(bones[10], 'x', [
+                    { time: 0, value: -0.5 },
+                    { time: 0.5, value: 0.5 },
+                    { time: 1, value: -0.5 }
+                ])
+            );
+            
+            // Arm movement (opposite to legs)
+            walkTracks.push(
+                createRotationTrack(bones[5], 'x', [
+                    { time: 0, value: -0.5 },
+                    { time: 0.5, value: 0.5 },
+                    { time: 1, value: -0.5 }
+                ])
+            );
+            
+            walkTracks.push(
+                createRotationTrack(bones[7], 'x', [
+                    { time: 0, value: 0.5 },
+                    { time: 0.5, value: -0.5 },
+                    { time: 1, value: 0.5 }
+                ])
+            );
+            
+            // Body bob
+            walkTracks.push(
+                createPositionTrack(bones[0], 'y', [
+                    { time: 0, value: 0 },
+                    { time: 0.25, value: 0.05 },
+                    { time: 0.5, value: 0 },
+                    { time: 0.75, value: 0.05 },
+                    { time: 1, value: 0 }
+                ])
+            );
+            
+            const walkClip = new THREE.AnimationClip('walk', 1, walkTracks);
+            
+            // Create run animation (faster walk with more movement)
+            const runTracks = [];
+            
+            // More exaggerated leg movement
+            runTracks.push(
+                createRotationTrack(bones[8], 'x', [
+                    { time: 0, value: 1 },
+                    { time: 0.25, value: -1 },
+                    { time: 0.5, value: 1 },
+                    { time: 0.75, value: -1 },
+                    { time: 1, value: 1 }
+                ])
+            );
+            
+            runTracks.push(
+                createRotationTrack(bones[10], 'x', [
+                    { time: 0, value: -1 },
+                    { time: 0.25, value: 1 },
+                    { time: 0.5, value: -1 },
+                    { time: 0.75, value: 1 },
+                    { time: 1, value: -1 }
+                ])
+            );
+            
+            // More exaggerated arm movement
+            runTracks.push(
+                createRotationTrack(bones[5], 'x', [
+                    { time: 0, value: -1 },
+                    { time: 0.25, value: 1 },
+                    { time: 0.5, value: -1 },
+                    { time: 0.75, value: 1 },
+                    { time: 1, value: -1 }
+                ])
+            );
+            
+            runTracks.push(
+                createRotationTrack(bones[7], 'x', [
+                    { time: 0, value: 1 },
+                    { time: 0.25, value: -1 },
+                    { time: 0.5, value: 1 },
+                    { time: 0.75, value: -1 },
+                    { time: 1, value: 1 }
+                ])
+            );
+            
+            // More body bob
+            runTracks.push(
+                createPositionTrack(bones[0], 'y', [
+                    { time: 0, value: 0 },
+                    { time: 0.125, value: 0.1 },
+                    { time: 0.25, value: 0 },
+                    { time: 0.375, value: 0.1 },
+                    { time: 0.5, value: 0 },
+                    { time: 0.625, value: 0.1 },
+                    { time: 0.75, value: 0 },
+                    { time: 0.875, value: 0.1 },
+                    { time: 1, value: 0 }
+                ])
+            );
+            
+            const runClip = new THREE.AnimationClip('run', 1, runTracks);
+            
+            // Create animation actions
+            idleAction = mixer.clipAction(idleClip);
+            walkAction = mixer.clipAction(walkClip);
+            runAction = mixer.clipAction(runClip);
+            
+            actions = [idleAction, walkAction, runAction];
+            
+            // Activate all actions
+            activateAllActions();
+        }
+
+        function createProceduralAnimationsForGLTF(model) {
+            // Simplified version for GLTF models without animations
+            mixer = new THREE.AnimationMixer(model);
+            
+            // We'll just create a simple rotation animation
+            const clip = new THREE.AnimationClip('rotate', 4, [
+                new THREE.VectorKeyframeTrack('.rotation[y]', [0, 2, 4], [0, Math.PI, Math.PI * 2])
+            ]);
+            
+            idleAction = mixer.clipAction(clip);
+            walkAction = mixer.clipAction(clip);
+            runAction = mixer.clipAction(clip);
+            
+            actions = [idleAction, walkAction, runAction];
+            
+            // Only activate idle for simplicity
+            setWeight(idleAction, 1);
+            idleAction.play();
+            
+            // Set initial weights
+            idleWeight = 1;
+            walkWeight = 0;
+            runWeight = 0;
+        }
+
+        function createRotationTrack(bone, axis, keyframes) {
+            const times = [];
+            const values = [];
+            
+            for (const kf of keyframes) {
+                times.push(kf.time);
+                values.push(kf.value);
+            }
+            
+            return new THREE.NumberKeyframeTrack(
+                bone.name + '.rotation[' + axis + ']',
+                times,
+                values
+            );
+        }
+
+        function createPositionTrack(bone, axis, keyframes) {
+            const times = [];
+            const values = [];
+            
+            for (const kf of keyframes) {
+                times.push(kf.time);
+                values.push(kf.value);
+            }
+            
+            return new THREE.NumberKeyframeTrack(
+                bone.name + '.position[' + axis + ']',
+                times,
+                values
+            );
+        }
+
+        function activateAllActions() {
+            // Set initial weights
+            setWeight(idleAction, idleWeight);
+            setWeight(walkAction, walkWeight);
+            setWeight(runAction, runWeight);
+            
+            // Play all actions
+            actions.forEach(function(action) {
+                if (action) {
+                    action.play();
+                }
+            });
+        }
+
+        function setWeight(action, weight) {
+            if (action) {
+                action.enabled = true;
+                action.setEffectiveWeight(weight);
+            }
+        }
+
+        function prepareCrossFade(startAction, endAction, duration = crossfadeDuration) {
+            if (!startAction || !endAction) return;
+            
+            // Reset end action
+            setWeight(endAction, 1);
+            if (endAction.time === 0) {
+                endAction.time = 0;
+            }
+            
+            // Crossfade
+            startAction.crossFadeTo(endAction, duration, true);
+        }
+
+        function updateUI() {
+            // Update slider values
+            document.getElementById('idleWeightValue').textContent = idleWeight.toFixed(2);
+            document.getElementById('walkWeightValue').textContent = walkWeight.toFixed(2);
+            document.getElementById('runWeightValue').textContent = runWeight.toFixed(2);
+            document.getElementById('speedValue').textContent = mixer.timeScale.toFixed(1);
+            
+            // Update sliders
+            document.getElementById('idleWeight').value = idleWeight;
+            document.getElementById('walkWeight').value = walkWeight;
+            document.getElementById('runWeight').value = runWeight;
+            document.getElementById('speed').value = mixer.timeScale;
+        }
+
+        function setupControls() {
+            // Slider event listeners
+            document.getElementById('idleWeight').addEventListener('input', function(e) {
+                idleWeight = parseFloat(e.target.value);
+                setWeight(idleAction, idleWeight);
+                updateUI();
+            });
+            
+            document.getElementById('walkWeight').addEventListener('input', function(e) {
+                walkWeight = parseFloat(e.target.value);
+                setWeight(walkAction, walkWeight);
+                updateUI();
+            });
+            
+            document.getElementById('runWeight').addEventListener('input', function(e) {
+                runWeight = parseFloat(e.target.value);
+                setWeight(runAction, runWeight);
+                updateUI();
+            });
+            
+            document.getElementById('speed').addEventListener('input', function(e) {
+                mixer.timeScale = parseFloat(e.target.value);
+                updateUI();
+            });
+            
+            // Button event listeners
+            document.getElementById('toIdle').addEventListener('click', function() {
+                if (walkAction && idleAction) {
+                    prepareCrossFade(walkAction, idleAction);
+                    walkWeight = 0;
+                    idleWeight = 1;
+                    runWeight = 0;
+                    updateUI();
+                }
+            });
+            
+            document.getElementById('toWalk').addEventListener('click', function() {
+                if (idleAction && walkAction) {
+                    prepareCrossFade(idleAction, walkAction);
+                    idleWeight = 0;
+                    walkWeight = 1;
+                    runWeight = 0;
+                    updateUI();
+                }
+            });
+            
+            document.getElementById('toRun').addEventListener('click', function() {
+                if (walkAction && runAction) {
+                    prepareCrossFade(walkAction, runAction);
+                    walkWeight = 0;
+                    runWeight = 1;
+                    idleWeight = 0;
+                    updateUI();
+                }
+            });
+            
+            document.getElementById('toWalkFromRun').addEventListener('click', function() {
+                if (runAction && walkAction) {
+                    prepareCrossFade(runAction, walkAction);
+                    runWeight = 0;
+                    walkWeight = 1;
+                    idleWeight = 0;
+                    updateUI();
+                }
+            });
+            
+            document.getElementById('showSkeleton').addEventListener('change', function(e) {
+                if (skeleton) {
+                    skeleton.visible = e.target.checked;
+                }
+            });
+            
+            document.getElementById('resetCamera').addEventListener('click', function() {
+                camera.position.set(2, 2, -4);
+                camera.lookAt(0, 1, 0);
+                controls.update();
+            });
+            
+            document.getElementById('togglePlay').addEventListener('click', function() {
+                isPlaying = !isPlaying;
+                if (isPlaying) {
+                    mixer.timeScale = parseFloat(document.getElementById('speed').value);
+                } else {
+                    mixer.timeScale = 0;
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update animation mixer
+            if (mixer) {
+                const delta = clock.getDelta();
+                mixer.update(delta);
+                
+                // Update weights from actions
+                if (idleAction) idleWeight = idleAction.getEffectiveWeight();
+                if (walkAction) walkWeight = walkAction.getEffectiveWeight();
+                if (runAction) runWeight = runAction.getEffectiveWeight();
+                
+                updateUI();
+            }
+            
+            // Update controls
+            controls.update();
+            
+            // Render scene
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
