@@ -1,0 +1,2198 @@
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Police Pursuit - Car Chase Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #0a0a1a;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #game-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .ui-panel {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.3);
+            border: none;
+            border-radius: 5px;
+            padding: 8px;
+            backdrop-filter: blur(2px);
+        }
+        
+        #stats {
+            top: 10px;
+            left: 10px;
+            min-width: 120px;
+            max-width: 140px;
+            font-size: 0.6rem;
+        }
+
+        #controls {
+            top: 10px;
+            right: 10px;
+            min-width: 140px;
+            max-width: 160px;
+            font-size: 0.6rem;
+        }
+        
+        #game-over {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 40px;
+            display: none;
+            z-index: 100;
+            pointer-events: all;
+        }
+        
+        h1, h2, h3 {
+            color: #3498db;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            text-shadow: 0 0 10px rgba(52, 152, 219, 0.7);
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .stat-label {
+            color: #aaa;
+        }
+        
+        .stat-value {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        #time-bar {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        #time-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        #police-count {
+            color: #e74c3c;
+            font-size: 1.5rem;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 10px;
+            pointer-events: all;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+        
+        #message {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+            display: none;
+            pointer-events: none;
+        }
+        
+        #mini-map {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #3498db;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .key {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 3px;
+            border: 1px solid #3498db;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a2a 0%, #1a1a4a 50%, #2a2a6a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            pointer-events: all;
+            overflow: hidden;
+        }
+
+        #start-screen::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="%23ffffff" opacity="0.03"/><circle cx="75" cy="75" r="1" fill="%23ffffff" opacity="0.02"/><circle cx="50" cy="10" r="0.5" fill="%23ffffff" opacity="0.04"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            pointer-events: none;
+        }
+
+        .game-logo {
+            text-align: center;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .game-logo .title {
+            font-size: 6rem;
+            font-weight: 900;
+            color: #fff;
+            text-shadow:
+                0 0 10px rgba(231, 76, 60, 0.8),
+                0 0 20px rgba(231, 76, 60, 0.6),
+                0 0 30px rgba(231, 76, 60, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.5);
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+            background: linear-gradient(45deg, #fff, #e74c3c, #fff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .game-logo .subtitle {
+            font-size: 1.8rem;
+            color: #3498db;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+            letter-spacing: 1px;
+            font-weight: 300;
+        }
+
+        .game-description {
+            max-width: 700px;
+            text-align: center;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .game-description p {
+            font-size: 1.2rem;
+            line-height: 1.8;
+            color: #ddd;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            margin-bottom: 20px;
+        }
+
+        .game-features {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .feature-item {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            min-width: 150px;
+        }
+
+        .feature-item .icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .feature-item .label {
+            font-size: 0.9rem;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .difficulty-selector {
+            margin: 30px 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .difficulty-selector h3 {
+            color: #fff;
+            margin-bottom: 15px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        }
+
+        .difficulty-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 12px 24px;
+            margin: 5px;
+            border-radius: 25px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .difficulty-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .difficulty-btn.active {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border-color: #e74c3c;
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.4);
+        }
+
+        #start-game {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border: none;
+            color: white;
+            padding: 18px 40px;
+            border-radius: 30px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+            position: relative;
+            z-index: 1;
+            margin-top: 20px;
+        }
+
+        #start-game:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(231, 76, 60, 0.5);
+            background: linear-gradient(135deg, #ff6b6b, #e74c3c);
+        }
+
+        .controls-preview {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+        }
+
+        .controls-preview h4 {
+            color: #3498db;
+            margin-bottom: 15px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        }
+
+        .controls-preview .control-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 0.9rem;
+        }
+
+        .controls-preview .key {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .police-icon {
+            color: #e74c3c;
+            display: inline-block;
+            margin-right: 5px;
+            filter: drop-shadow(0 0 5px rgba(231, 76, 60, 0.8));
+        }
+
+        /* Animated background elements */
+        .bg-element {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(231, 76, 60, 0.1) 0%, transparent 70%);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .bg-element:nth-child(1) {
+            width: 200px;
+            height: 200px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .bg-element:nth-child(2) {
+            width: 150px;
+            height: 150px;
+            top: 60%;
+            right: 15%;
+            animation-delay: 2s;
+        }
+
+        .bg-element:nth-child(3) {
+            width: 100px;
+            height: 100px;
+            bottom: 20%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+
+        /* Mobile Touch Controls */
+        .touch-controls {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        .touch-controls.show {
+            display: block;
+        }
+
+        .touch-btn {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(52, 152, 219, 0.8);
+            border: 2px solid #3498db;
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all;
+            transition: all 0.2s;
+            backdrop-filter: blur(5px);
+        }
+
+        .touch-btn:active {
+            background: rgba(52, 152, 219, 1);
+            transform: scale(0.95);
+        }
+
+        .touch-btn.left {
+            left: 20px;
+            bottom: 80px;
+        }
+
+        .touch-btn.right {
+            left: 100px;
+            bottom: 80px;
+        }
+
+        .touch-btn.up {
+            left: 60px;
+            bottom: 140px;
+        }
+
+        .touch-btn.down {
+            left: 60px;
+            bottom: 20px;
+        }
+
+        .touch-btn.boost {
+            right: 100px;
+            bottom: 80px;
+            background: rgba(231, 76, 60, 0.8);
+            border-color: #e74c3c;
+        }
+
+        .touch-btn.boost:active {
+            background: rgba(231, 76, 60, 1);
+        }
+
+        .touch-btn.brake {
+            right: 20px;
+            bottom: 20px;
+            background: rgba(230, 126, 34, 0.8);
+            border-color: #e67e22;
+        }
+
+        .touch-btn.brake:active {
+            background: rgba(230, 126, 34, 1);
+        }
+
+        @media (max-width: 768px) {
+            .touch-controls {
+                display: block;
+            }
+
+            #stats, #controls {
+                font-size: 0.8rem;
+                min-width: 150px;
+                max-width: 180px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div id="start-screen">
+                <div class="bg-element"></div>
+                <div class="bg-element"></div>
+                <div class="bg-element"></div>
+
+                <div class="game-logo">
+                    <div class="title">POLICE PURSUIT</div>
+                    <div class="subtitle">Night City Chase</div>
+                </div>
+
+                <div class="game-description">
+                    <p>Navigate the neon-lit streets of a sprawling metropolis where every turn brings new danger. Outrun relentless police pursuit as pressure mounts and the city closes in around you.</p>
+                </div>
+
+                <div class="game-features">
+                    <div class="feature-item">
+                        <div class="icon">🏎️</div>
+                        <div class="label">High-Speed Chase</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="icon">🚔</div>
+                        <div class="label">Police AI</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="icon">🌃</div>
+                        <div class="label">Night City</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="icon">💥</div>
+                        <div class="label">Nitro Boost</div>
+                    </div>
+                </div>
+
+                <div class="difficulty-selector">
+                    <h3>Select Difficulty</h3>
+                    <button class="difficulty-btn active" data-difficulty="easy">Easy</button>
+                    <button class="difficulty-btn" data-difficulty="medium">Medium</button>
+                    <button class="difficulty-btn" data-difficulty="hard">Hard</button>
+                </div>
+
+                <button id="start-game">START CHASE</button>
+
+                <div class="controls-preview">
+                    <h4>Controls</h4>
+                    <div class="control-item">
+                        <span>Movement:</span>
+                        <span><span class="key">WASD</span> / <span class="key">↑←↓→</span></span>
+                    </div>
+                    <div class="control-item">
+                        <span>Handbrake:</span>
+                        <span class="key">SPACE</span>
+                    </div>
+                    <div class="control-item">
+                        <span>Nitro Boost:</span>
+                        <span class="key">SHIFT</span>
+                    </div>
+                    <div class="control-item">
+                        <span>Reset Car:</span>
+                        <span class="key">R</span>
+                    </div>
+                    <div class="control-item">
+                        <span>Camera:</span>
+                        <span class="key">C</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="stats" class="ui-panel">
+                <h2>Game Stats</h2>
+                <div class="stat-row">
+                    <span class="stat-label">Time Survived:</span>
+                    <span id="time-value" class="stat-value">00:00</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Police Pressure:</span>
+                    <span id="pressure-value" class="stat-value">Low</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Police Cars:</span>
+                    <span id="police-count" class="stat-value">1</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Speed:</span>
+                    <span id="speed-value" class="stat-value">0 km/h</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Health:</span>
+                    <span id="health-value" class="stat-value">100%</span>
+                </div>
+                <div id="time-bar">
+                    <div id="time-progress"></div>
+                </div>
+                <div style="text-align: center; margin-top: 10px;">
+                    <span style="color: #2ecc71;">Survive</span> | 
+                    <span style="color: #f1c40f;">Warning</span> | 
+                    <span style="color: #e74c3c;">Danger</span>
+                </div>
+            </div>
+            
+            <div id="controls" class="ui-panel">
+                <h2>Controls</h2>
+                <p><span class="key">W</span>/<span class="key">↑</span> - Accelerate</p>
+                <p><span class="key">S</span>/<span class="key">↓</span> - Brake/Reverse</p>
+                <p><span class="key">A</span>/<span class="key">←</span> - Steer Left</p>
+                <p><span class="key">D</span>/<span class="key">→</span> - Steer Right</p>
+                <p><span class="key">SPACE</span> - Handbrake</p>
+                <p><span class="key">SHIFT</span> - Boost (Limited)</p>
+                <p><span class="key">R</span> - Reset Car</p>
+                <p><span class="key">C</span> - Change Camera</p>
+                <div style="margin-top: 15px;">
+                    <button id="restart-btn" class="btn btn-danger">RESTART GAME</button>
+                </div>
+            </div>
+            
+            <div id="game-over" class="ui-panel">
+                <h1>GAME OVER</h1>
+                <h2 id="result-message">You were captured!</h2>
+                <div class="stat-row">
+                    <span class="stat-label">Time Survived:</span>
+                    <span id="final-time" class="stat-value">00:00</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Police Evaded:</span>
+                    <span id="police-evaded" class="stat-value">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Max Police Pressure:</span>
+                    <span id="max-pressure" class="stat-value">Low</span>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button id="play-again" class="btn btn-success">PLAY AGAIN</button>
+                </div>
+            </div>
+            
+            <div id="message"></div>
+            
+            <div id="mini-map"></div>
+        </div>
+    </div>
+
+    <!-- Three.js and dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let playerCar, policeCars = [], civilianCars = [];
+        let city = { buildings: [], roads: [], streetLights: [] };
+        let clock = new THREE.Clock();
+        let gameTime = 0;
+        let gameActive = false;
+        let difficulty = 'medium';
+        let policePressure = 1;
+        let policeSpawnTimer = 0;
+        let playerHealth = 100;
+        let gameSpeed = 1;
+        let score = 0;
+        let cameraMode = 'chase'; // chase, orbit, first-person
+        let currentCamera;
+        let boostAmount = 100;
+        let boostActive = false;
+        let keys = {};
+        let touchControls = {
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            boost: false,
+            brake: false
+        };
+        let boostParticles = [];
+        let boostParticleCount = 150;
+        
+        // Game settings by difficulty
+        const DIFFICULTY_SETTINGS = {
+            easy: {
+                policeSpawnRate: 15,
+                policeSpeedMultiplier: 0.8,
+                civilianCarCount: 8,
+                playerHealth: 120,
+                boostRecharge: 0.5
+            },
+            medium: {
+                policeSpawnRate: 10,
+                policeSpeedMultiplier: 1.0,
+                civilianCarCount: 12,
+                playerHealth: 100,
+                boostRecharge: 0.3
+            },
+            hard: {
+                policeSpawnRate: 6,
+                policeSpeedMultiplier: 1.3,
+                civilianCarCount: 16,
+                playerHealth: 80,
+                boostRecharge: 0.2
+            }
+        };
+        
+        // Initialize the game
+        function init() {
+            console.log("Initializing game...");
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x0a0a1a, 10, 300);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 10, 20);
+            currentCamera = camera;
+            
+            // Create renderer with mobile optimizations
+            const canvas = document.getElementById('game-canvas');
+
+            // Check if WebGL is supported
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (!gl) {
+                alert('WebGL is not supported on this device. Please try a different browser or device.');
+                return;
+            }
+
+            // Mobile-specific renderer settings
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+            const rendererOptions = {
+                canvas: canvas,
+                alpha: true,
+                antialias: !isMobile, // Disable antialiasing on mobile for performance
+                powerPreference: isMobile ? 'low-power' : 'high-performance'
+            };
+
+            try {
+                renderer = new THREE.WebGLRenderer(rendererOptions);
+            } catch (error) {
+                console.error('Failed to create WebGL renderer:', error);
+                alert('Failed to initialize graphics. Please try refreshing the page.');
+                return;
+            }
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Reduce quality on mobile devices
+            if (isMobile) {
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio
+                renderer.shadowMap.enabled = false; // Disable shadows on mobile
+                console.log('Mobile device detected - using optimized settings');
+            } else {
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                renderer.setPixelRatio(window.devicePixelRatio);
+            }
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.camera.left = -100;
+            directionalLight.shadow.camera.right = 100;
+            directionalLight.shadow.camera.top = 100;
+            directionalLight.shadow.camera.bottom = -100;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // Add moonlight for night effect
+            const moonLight = new THREE.DirectionalLight(0x6688cc, 0.3);
+            moonLight.position.set(-50, 100, -50);
+            scene.add(moonLight);
+            
+            // Create city
+            createCity(isMobile);
+
+            // Create stars in the sky
+            createStars();
+
+            // Create boost particles
+            createBoostParticles();
+
+            // Create player car
+            createPlayerCar(isMobile);
+
+            // Create initial police car
+            createPoliceCar(isMobile);
+            
+            // Create civilian cars
+            createCivilianCars(DIFFICULTY_SETTINGS[difficulty].civilianCarCount);
+            
+            // Setup event listeners
+            setupEventListeners();
+            
+            // Start game loop
+            animate();
+            
+            console.log("Game initialized successfully!");
+        }
+        
+        // Create the city environment
+        function createCity(isMobile = false) {
+            // Create roads in a grid pattern
+            const roadWidth = 10;
+            const blockSize = 50;
+            
+            for (let x = -4; x <= 4; x++) {
+                for (let z = -4; z <= 4; z++) {
+                    // Create road intersections
+                    if (x % 2 === 0 || z % 2 === 0) {
+                        // Roads
+                        const roadGeometry = new THREE.PlaneGeometry(roadWidth, blockSize);
+                        const roadMaterial = new THREE.MeshStandardMaterial({ 
+                            color: 0x333333,
+                            roughness: 0.9,
+                            metalness: 0.1
+                        });
+                        
+                        const road = new THREE.Mesh(roadGeometry, roadMaterial);
+                        road.rotation.x = -Math.PI / 2;
+                        road.position.set(x * blockSize, 0.01, z * blockSize);
+                        if (!isMobile) road.receiveShadow = true;
+                        scene.add(road);
+                        city.roads.push(road);
+                        
+                        // Road markings
+                        if (x % 2 === 0) {
+                            const markingGeometry = new THREE.PlaneGeometry(0.2, blockSize - 2);
+                            const markingMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+                            const marking = new THREE.Mesh(markingGeometry, markingMaterial);
+                            marking.rotation.x = -Math.PI / 2;
+                            marking.position.set(x * blockSize, 0.02, z * blockSize);
+                            scene.add(marking);
+                        }
+                    } else {
+                        // Building blocks - create various buildings
+                        createBuildingBlock(x * blockSize, z * blockSize);
+                    }
+                }
+            }
+            
+            // Add street lights along roads
+            for (let x = -4; x <= 4; x += 2) {
+                for (let z = -4; z <= 4; z += 2) {
+                    createStreetLight(x * blockSize + 15, z * blockSize + 15);
+                    createStreetLight(x * blockSize - 15, z * blockSize + 15);
+                    createStreetLight(x * blockSize + 15, z * blockSize - 15);
+                    createStreetLight(x * blockSize - 15, z * blockSize - 15);
+                }
+            }
+            
+            // Add city boundaries/walls
+            createCityBoundaries();
+
+            // Add ground plane for non-road areas
+            const groundGeometry = new THREE.PlaneGeometry(500, 500);
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x2d5016,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = 0.005; // Slightly below roads to prevent z-fighting
+            ground.receiveShadow = true;
+            scene.add(ground);
+        }
+
+        // Create 3D stars in the sky
+        function createStars() {
+            const starGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const starMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                emissive: 0xffffff,
+                emissiveIntensity: 0.8
+            });
+
+            for (let i = 0; i < 200; i++) {
+                const star = new THREE.Mesh(starGeometry, starMaterial);
+
+                // Random position in the sky
+                const radius = 300 + Math.random() * 200;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI / 2;
+
+                star.position.x = radius * Math.sin(phi) * Math.cos(theta);
+                star.position.y = radius * Math.cos(phi) + 50;
+                star.position.z = radius * Math.sin(phi) * Math.sin(theta);
+
+                // Random size variation
+                const scale = 0.5 + Math.random() * 1.5;
+                star.scale.set(scale, scale, scale);
+
+                scene.add(star);
+            }
+
+            console.log("Stars created in the sky");
+        }
+
+        // Create a building block with multiple buildings
+        function createBuildingBlock(x, z) {
+            const blockSize = 40;
+            const buildingCount = Math.floor(Math.random() * 3) + 2;
+            
+            for (let i = 0; i < buildingCount; i++) {
+                const buildingWidth = Math.random() * 10 + 8;
+                const buildingDepth = Math.random() * 10 + 8;
+                const buildingHeight = Math.random() * 20 + 10;
+                
+                const buildingGeometry = new THREE.BoxGeometry(buildingWidth, buildingHeight, buildingDepth);
+                
+                // Random building color
+                const colors = [0x8B4513, 0x696969, 0x2F4F4F, 0x708090, 0x556B2F];
+                const buildingColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                const buildingMaterial = new THREE.MeshStandardMaterial({ 
+                    color: buildingColor,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                
+                const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                
+                // Position within the block
+                const posX = x + (Math.random() - 0.5) * 20;
+                const posZ = z + (Math.random() - 0.5) * 20;
+                
+                building.position.set(posX, buildingHeight / 2, posZ);
+                building.castShadow = true;
+                building.receiveShadow = true;
+                
+                scene.add(building);
+                city.buildings.push(building);
+                
+                // Add windows
+                addWindowsToBuilding(building, buildingWidth, buildingHeight, buildingDepth);
+                
+                // Random chance for shop sign
+                if (Math.random() > 0.7) {
+                    addShopSign(building, buildingHeight);
+                }
+            }
+        }
+        
+        // Add windows to a building
+        function addWindowsToBuilding(building, width, height, depth) {
+            const windowRows = Math.floor(height / 3);
+            const windowCols = Math.floor(width / 2);
+            
+            for (let row = 0; row < windowRows; row++) {
+                for (let col = 0; col < windowCols; col++) {
+                    // Randomly decide if window is lit
+                    const isLit = Math.random() > 0.3;
+                    const windowColor = isLit ? 0xffffaa : 0x222222;
+                    
+                    const windowGeometry = new THREE.PlaneGeometry(1, 1.5);
+                    const windowMaterial = new THREE.MeshStandardMaterial({ 
+                        color: windowColor,
+                        emissive: isLit ? 0xffffaa : 0x000000,
+                        emissiveIntensity: isLit ? 0.3 : 0
+                    });
+                    
+                    const window = new THREE.Mesh(windowGeometry, windowMaterial);
+                    
+                    // Position on front face
+                    window.position.set(
+                        building.position.x - width/2 + col * 2 + 1,
+                        building.position.y - height/2 + row * 3 + 2,
+                        building.position.z + depth/2 + 0.1
+                    );
+                    
+                    scene.add(window);
+                    
+                    // Add window to opposite side too
+                    const windowBack = window.clone();
+                    windowBack.position.z = building.position.z - depth/2 - 0.1;
+                    scene.add(windowBack);
+                }
+            }
+        }
+        
+        // Add a shop sign to a building
+        function addShopSign(building, height) {
+            const signTypes = ['SHOP', 'CAFE', 'STORE', 'MART', 'FOOD'];
+            const signText = signTypes[Math.floor(Math.random() * signTypes.length)];
+            
+            // Create sign board
+            const signGeometry = new THREE.BoxGeometry(6, 1, 0.2);
+            const signMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xff4444,
+                emissive: 0xff0000,
+                emissiveIntensity: 0.3
+            });
+            
+            const sign = new THREE.Mesh(signGeometry, signMaterial);
+            sign.position.set(
+                building.position.x,
+                building.position.y + height/2 + 2,
+                building.position.z
+            );
+            
+            scene.add(sign);
+        }
+        
+        // Create a street light
+        function createStreetLight(x, z) {
+            // Pole
+            const poleGeometry = new THREE.CylinderGeometry(0.1, 0.15, 8);
+            const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
+            const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+            pole.position.set(x, 4, z);
+            pole.castShadow = true;
+            scene.add(pole);
+            
+            // Light fixture
+            const fixtureGeometry = new THREE.SphereGeometry(0.5);
+            const fixtureMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xffffaa,
+                emissive: 0xffffaa,
+                emissiveIntensity: 0.8
+            });
+            const fixture = new THREE.Mesh(fixtureGeometry, fixtureMaterial);
+            fixture.position.set(x, 8, z);
+            scene.add(fixture);
+            
+            // Light source
+            const light = new THREE.PointLight(0xffffaa, 1, 20);
+            light.position.set(x, 7, z);
+            scene.add(light);
+            
+            city.streetLights.push({ pole, fixture, light });
+        }
+        
+        // Create city boundaries
+        function createCityBoundaries() {
+            const wallHeight = 20;
+            const wallLength = 500;
+            
+            // North wall
+            createWall(0, wallHeight/2, -wallLength/2, wallLength, wallHeight, 1);
+            // South wall
+            createWall(0, wallHeight/2, wallLength/2, wallLength, wallHeight, 1);
+            // East wall
+            createWall(wallLength/2, wallHeight/2, 0, 1, wallHeight, wallLength);
+            // West wall
+            createWall(-wallLength/2, wallHeight/2, 0, 1, wallHeight, wallLength);
+            
+            function createWall(x, y, z, width, height, depth) {
+                const geometry = new THREE.BoxGeometry(width, height, depth);
+                const material = new THREE.MeshStandardMaterial({ 
+                    color: 0x444444,
+                    roughness: 0.9
+                });
+                const wall = new THREE.Mesh(geometry, material);
+                wall.position.set(x, y, z);
+                wall.receiveShadow = true;
+                scene.add(wall);
+                return wall;
+            }
+        }
+        
+        // Create boost particles for nitro effect
+        function createBoostParticles() {
+            for (let i = 0; i < boostParticleCount; i++) {
+                const particleGeometry = new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 6, 6);
+                const particleMaterial = new THREE.MeshBasicMaterial({
+                    color: new THREE.Color().setHSL(0.08 + Math.random() * 0.1, 1, 0.5 + Math.random() * 0.5),
+                    transparent: true,
+                    opacity: 0.8
+                });
+
+                const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                particle.visible = false;
+
+                // Add physics properties
+                particle.velocity = new THREE.Vector3();
+                particle.life = 0;
+                particle.maxLife = 0.5 + Math.random() * 0.5;
+
+                scene.add(particle);
+                boostParticles.push(particle);
+            }
+            console.log("Boost particles created");
+        }
+
+        // Update boost particles
+        function updateBoostParticles(deltaTime) {
+            if (!playerCar) return;
+
+            boostParticles.forEach(particle => {
+                if (boostActive && particle.life <= 0 && Math.random() < 0.8) {
+                    // Spawn new particle (increased spawn rate)
+                    particle.visible = true;
+                    particle.life = particle.maxLife;
+
+
+                    // Position behind the car (relative to car rotation for proper direction)
+                    const offsetX = (Math.random() - 0.5) * 1.2;
+                    const offsetZ = -3.5 + (Math.random() - 0.5) * 0.6; // Behind the car in local space
+
+                    // Calculate world position based on car rotation
+                    const cos = Math.cos(playerCar.rotation.y);
+                    const sin = Math.sin(playerCar.rotation.y);
+
+                    particle.position.set(
+                        playerCar.position.x + offsetX * cos - offsetZ * sin,
+                        playerCar.position.y - 0.3,
+                        playerCar.position.z + offsetX * sin + offsetZ * cos
+                    );
+
+                    // Initial velocity (backwards and more upwards for flame effect)
+                    particle.velocity.set(
+                        offsetX * 3,
+                        Math.random() * 3 + 1, // More upward velocity for flame look
+                        -8 - Math.random() * 5 // Faster backwards movement
+                    );
+                }
+
+                if (particle.life > 0) {
+                    // Update particle
+                    particle.life -= deltaTime;
+                    particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
+
+                    // Fade out
+                    const lifeRatio = particle.life / particle.maxLife;
+                    particle.material.opacity = lifeRatio * 0.8;
+
+                    // Scale down
+                    const scale = lifeRatio * (0.05 + particle.geometry.parameters.radius * 2);
+                    particle.scale.set(scale, scale, scale);
+
+                    // Change color as it fades (from bright orange to dark red for fire effect)
+                    particle.material.color.setHSL(0.05 + (1 - lifeRatio) * 0.02, 1, 0.2 + lifeRatio * 0.5);
+
+                    if (particle.life <= 0) {
+                        particle.visible = false;
+                    }
+                }
+            });
+        }
+
+        // Create player car
+        function createPlayerCar(isMobile = false) {
+            // Car body (main chassis)
+            const carBodyGeometry = new THREE.BoxGeometry(3, 1, 4);
+            const carBodyMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00ff00,
+                roughness: 0.3,
+                metalness: 0.9
+            });
+            const carBody = new THREE.Mesh(carBodyGeometry, carBodyMaterial);
+
+            // Car hood
+            const hoodGeometry = new THREE.BoxGeometry(2.8, 0.3, 1.5);
+            const hoodMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00dd00,
+                roughness: 0.2,
+                metalness: 0.95
+            });
+            const hood = new THREE.Mesh(hoodGeometry, hoodMaterial);
+            hood.position.set(0, 0.35, -2.25);
+
+            // Car trunk
+            const trunkGeometry = new THREE.BoxGeometry(2.8, 0.5, 1);
+            const trunkMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00bb00,
+                roughness: 0.4,
+                metalness: 0.8
+            });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.set(0, 0.25, 2.5);
+
+            // Car top/roof
+            const carTopGeometry = new THREE.BoxGeometry(2, 1, 3);
+            const carTopMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00cc00,
+                roughness: 0.3,
+                metalness: 0.85
+            });
+            const carTop = new THREE.Mesh(carTopGeometry, carTopMaterial);
+            carTop.position.y = 1;
+
+            // Windows
+            const windowGeometry = new THREE.PlaneGeometry(1.8, 0.8);
+            const windowMaterial = new THREE.MeshStandardMaterial({
+                color: 0x87ceeb,
+                roughness: 0.1,
+                metalness: 0.1,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+            frontWindow.position.set(0, 1.4, -1.5);
+            frontWindow.rotation.x = Math.PI / 6;
+
+            const rearWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+            rearWindow.position.set(0, 1.4, 1.5);
+            rearWindow.rotation.x = -Math.PI / 6;
+
+            const sideWindows = [];
+            for (let i = 0; i < 4; i++) {
+                const sideWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+                sideWindow.position.set(i < 2 ? 1 : -1, 1.4, i % 2 === 0 ? -0.5 : 0.5);
+                sideWindow.rotation.y = i < 2 ? Math.PI / 2 : -Math.PI / 2;
+                sideWindow.rotation.x = Math.PI / 12;
+                sideWindows.push(sideWindow);
+            }
+
+            // Headlights - smoother
+            const headlightGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16, 8);
+            const headlightMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                emissive: 0xffffff,
+                emissiveIntensity: 0.8
+            });
+
+            const leftHeadlight = new THREE.Mesh(headlightGeometry, headlightMaterial);
+            leftHeadlight.position.set(1, 0.2, -3);
+            leftHeadlight.rotation.z = Math.PI / 2;
+
+            const rightHeadlight = new THREE.Mesh(headlightGeometry, headlightMaterial);
+            rightHeadlight.position.set(-1, 0.2, -3);
+            rightHeadlight.rotation.z = Math.PI / 2;
+
+            // Taillights - smoother
+            const taillightGeometry = new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16, 8);
+            const taillightMaterial = new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0.6
+            });
+
+            const leftTaillight = new THREE.Mesh(taillightGeometry, taillightMaterial);
+            leftTaillight.position.set(1, 0.2, 3);
+            leftTaillight.rotation.z = Math.PI / 2;
+
+            const rightTaillight = new THREE.Mesh(taillightGeometry, taillightMaterial);
+            rightTaillight.position.set(-1, 0.2, 3);
+            rightTaillight.rotation.z = Math.PI / 2;
+
+            // Wheels with smoother detail
+            const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 24, 8);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const rimGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.35, 16, 8);
+            const rimMaterial = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                metalness: 0.9,
+                roughness: 0.1
+            });
+
+            const wheels = [];
+            const wheelPositions = [
+                { x: 1.2, y: -0.5, z: 2 },
+                { x: -1.2, y: -0.5, z: 2 },
+                { x: 1.2, y: -0.5, z: -2 },
+                { x: -1.2, y: -0.5, z: -2 }
+            ];
+
+            wheelPositions.forEach(pos => {
+                const wheelGroup = new THREE.Group();
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                const rim = new THREE.Mesh(rimGeometry, rimMaterial);
+                wheelGroup.add(wheel);
+                wheelGroup.add(rim);
+                wheelGroup.rotation.z = Math.PI / 2;
+                wheelGroup.position.set(pos.x, pos.y, pos.z);
+                wheels.push(wheelGroup);
+            });
+
+            // Create car group
+            playerCar = new THREE.Group();
+            playerCar.add(carBody);
+            playerCar.add(hood);
+            playerCar.add(trunk);
+            playerCar.add(carTop);
+            playerCar.add(frontWindow);
+            playerCar.add(rearWindow);
+            sideWindows.forEach(window => playerCar.add(window));
+            playerCar.add(leftHeadlight);
+            playerCar.add(rightHeadlight);
+            playerCar.add(leftTaillight);
+            playerCar.add(rightTaillight);
+            wheels.forEach(wheel => playerCar.add(wheel));
+
+            playerCar.position.set(0, 1, 0);
+            if (!isMobile) playerCar.castShadow = true;
+
+            // Add physics properties
+            playerCar.velocity = new THREE.Vector3();
+            playerCar.speed = 0;
+            playerCar.maxSpeed = 0.5;
+            playerCar.acceleration = 0.02;
+            playerCar.braking = 0.05;
+            playerCar.turning = 0.04;
+            playerCar.health = DIFFICULTY_SETTINGS[difficulty].playerHealth;
+
+            // Initialize control states
+            playerCar.accelerating = false;
+            playerCar.braking = false;
+            playerCar.turningLeft = false;
+            playerCar.turningRight = false;
+            playerCar.handbrake = false;
+
+            scene.add(playerCar);
+
+            // Add player car light
+            const playerLight = new THREE.SpotLight(0xffffff, 1, 50, Math.PI / 6);
+            playerLight.position.set(0, 1, -3);
+            playerLight.target.position.set(0, 0, -10);
+            playerCar.add(playerLight);
+            playerCar.add(playerLight.target);
+
+            console.log("Enhanced player car created");
+        }
+        
+        // Create a police car
+        function createPoliceCar(isMobile = false) {
+            // Car body
+            const carBodyGeometry = new THREE.BoxGeometry(3, 1, 6);
+            const carBodyMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x0000ff,
+                roughness: 0.5,
+                metalness: 0.8
+            });
+            const carBody = new THREE.Mesh(carBodyGeometry, carBodyMaterial);
+            
+            // Car top with light bar
+            const carTopGeometry = new THREE.BoxGeometry(2, 0.5, 3);
+            const carTopMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x0000aa,
+                roughness: 0.5,
+                metalness: 0.8
+            });
+            const carTop = new THREE.Mesh(carTopGeometry, carTopMaterial);
+            carTop.position.y = 1;
+            
+            // Light bar
+            const lightBarGeometry = new THREE.BoxGeometry(2.5, 0.3, 0.5);
+            const lightBarMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0.5
+            });
+            const lightBar = new THREE.Mesh(lightBarGeometry, lightBarMaterial);
+            lightBar.position.y = 1.5;
+            
+            // Wheels
+            const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 16);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            
+            const wheels = [];
+            const wheelPositions = [
+                { x: 1.2, y: -0.5, z: 2 },
+                { x: -1.2, y: -0.5, z: 2 },
+                { x: 1.2, y: -0.5, z: -2 },
+                { x: -1.2, y: -0.5, z: -2 }
+            ];
+            
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(pos.x, pos.y, pos.z);
+                wheels.push(wheel);
+            });
+            
+            // Create car group
+            const policeCar = new THREE.Group();
+            policeCar.add(carBody);
+            policeCar.add(carTop);
+            policeCar.add(lightBar);
+            wheels.forEach(wheel => policeCar.add(wheel));
+            
+            // Random position away from player
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 50 + Math.random() * 50;
+            policeCar.position.set(
+                Math.cos(angle) * distance,
+                1,
+                Math.sin(angle) * distance
+            );
+
+            if (!isMobile) policeCar.castShadow = true;
+            
+            // Add AI properties
+            policeCar.target = playerCar;
+            policeCar.speed = 0;
+            policeCar.maxSpeed = 0.3 * DIFFICULTY_SETTINGS[difficulty].policeSpeedMultiplier;
+            policeCar.acceleration = 0.015;
+            policeCar.turning = 0.03;
+            policeCar.velocity = new THREE.Vector3();
+            
+            scene.add(policeCar);
+            policeCars.push(policeCar);
+            
+            // Add police light
+            const policeLight = new THREE.SpotLight(0xff0000, 2, 100, Math.PI / 4);
+            policeLight.position.set(0, 2, 0);
+            policeCar.add(policeLight);
+            
+            console.log("Police car created");
+            return policeCar;
+        }
+        
+        // Create civilian cars
+        function createCivilianCars(count) {
+            const carColors = [0xff0000, 0xffff00, 0xff8800, 0x8800ff, 0xffffff];
+            
+            for (let i = 0; i < count; i++) {
+                // Car body
+                const carBodyGeometry = new THREE.BoxGeometry(2.5, 1, 5);
+                const carColor = carColors[Math.floor(Math.random() * carColors.length)];
+                const carBodyMaterial = new THREE.MeshStandardMaterial({ 
+                    color: carColor,
+                    roughness: 0.6,
+                    metalness: 0.7
+                });
+                const carBody = new THREE.Mesh(carBodyGeometry, carBodyMaterial);
+                
+                // Car top
+                const carTopGeometry = new THREE.BoxGeometry(2, 1, 3);
+                const carTopMaterial = new THREE.MeshStandardMaterial({ 
+                    color: carColor,
+                    roughness: 0.6,
+                    metalness: 0.7
+                });
+                const carTop = new THREE.Mesh(carTopGeometry, carTopMaterial);
+                carTop.position.y = 1;
+                
+                // Wheels
+                const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+                const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
+                
+                const wheels = [];
+                const wheelPositions = [
+                    { x: 1, y: -0.5, z: 1.5 },
+                    { x: -1, y: -0.5, z: 1.5 },
+                    { x: 1, y: -0.5, z: -1.5 },
+                    { x: -1, y: -0.5, z: -1.5 }
+                ];
+                
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(pos.x, pos.y, pos.z);
+                    wheels.push(wheel);
+                });
+                
+                // Create car group
+                const civilianCar = new THREE.Group();
+                civilianCar.add(carBody);
+                civilianCar.add(carTop);
+                wheels.forEach(wheel => civilianCar.add(wheel));
+                
+                // Random position on roads
+                const roadX = (Math.floor(Math.random() * 5) - 2) * 100;
+                const roadZ = (Math.floor(Math.random() * 5) - 2) * 100;
+                civilianCar.position.set(roadX + (Math.random() - 0.5) * 20, 1, roadZ + (Math.random() - 0.5) * 20);
+                
+                civilianCar.castShadow = true;
+                
+                // Add AI properties
+                civilianCar.speed = 0.1 + Math.random() * 0.1;
+                civilianCar.direction = new THREE.Vector3(
+                    Math.random() - 0.5,
+                    0,
+                    Math.random() - 0.5
+                ).normalize();
+                civilianCar.wanderTimer = 0;
+                
+                scene.add(civilianCar);
+                civilianCars.push(civilianCar);
+            }
+            console.log(`Created ${count} civilian cars`);
+        }
+        
+        // Setup touch controls for mobile
+        function setupTouchControls() {
+            const touchControlsEl = document.getElementById('touch-controls');
+            if (!touchControlsEl) return;
+
+            // Show touch controls on mobile
+            if (window.innerWidth <= 768 || 'ontouchstart' in window) {
+                touchControlsEl.classList.add('show');
+            }
+
+            // Touch event handlers
+            const buttons = {
+                'touch-left': 'left',
+                'touch-right': 'right',
+                'touch-up': 'up',
+                'touch-down': 'down',
+                'touch-boost': 'boost',
+                'touch-brake': 'brake'
+            };
+
+            Object.keys(buttons).forEach(btnId => {
+                const button = document.getElementById(btnId);
+                if (button) {
+                    const control = buttons[btnId];
+
+                    button.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls[control] = true;
+                    });
+
+                    button.addEventListener('touchend', function(e) {
+                        e.preventDefault();
+                        touchControls[control] = false;
+                    });
+
+                    // Also handle mouse events for testing on desktop
+                    button.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        touchControls[control] = true;
+                    });
+
+                    button.addEventListener('mouseup', function(e) {
+                        e.preventDefault();
+                        touchControls[control] = false;
+                    });
+
+                    button.addEventListener('mouseleave', function(e) {
+                        e.preventDefault();
+                        touchControls[control] = false;
+                    });
+                }
+            });
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            console.log("Setting up event listeners...");
+            
+            // Start game button
+            document.getElementById('start-game').addEventListener('click', function() {
+                console.log("Start game button clicked");
+                startGame();
+            });
+            
+            // Difficulty buttons
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    difficulty = this.dataset.difficulty;
+                    console.log(`Difficulty set to: ${difficulty}`);
+                });
+            });
+            
+            // Restart button
+            document.getElementById('restart-btn').addEventListener('click', function() {
+                console.log("Restart button clicked");
+                restartGame();
+            });
+            
+            document.getElementById('play-again').addEventListener('click', function() {
+                console.log("Play again button clicked");
+                restartGame();
+            });
+            
+            // Keyboard controls
+            document.addEventListener('keydown', function(event) {
+                keys[event.key.toLowerCase()] = true;
+                
+                if (!gameActive) return;
+                
+                // Special keys
+                switch(event.key.toLowerCase()) {
+                    case 'r':
+                        resetPlayerCar();
+                        break;
+                    case 'c':
+                        switchCamera();
+                        break;
+                    case 'shift':
+                        if (boostAmount > 0) {
+                            boostActive = true;
+                            console.log("Boost activated! Amount:", boostAmount);
+                        } else {
+                            console.log("Boost not available - amount:", boostAmount);
+                        }
+                        break;
+                }
+            });
+            
+            document.addEventListener('keyup', function(event) {
+                keys[event.key.toLowerCase()] = false;
+                
+                if (!gameActive) return;
+                
+                if (event.key.toLowerCase() === 'shift') {
+                    boostActive = false;
+                }
+            });
+            
+            // Window resize
+            window.addEventListener('resize', onWindowResize);
+
+            // Setup touch controls
+            setupTouchControls();
+
+            console.log("Event listeners set up");
+        }
+        
+        // Start the game
+        function startGame() {
+            console.log("Starting game...");
+            
+            // Hide start screen
+            const startScreen = document.getElementById('start-screen');
+            if (startScreen) {
+                startScreen.style.display = 'none';
+                console.log("Start screen hidden");
+            }
+            
+            // Reset game state
+            gameActive = true;
+            gameTime = 0;
+            policePressure = 1;
+            playerHealth = DIFFICULTY_SETTINGS[difficulty].playerHealth;
+            score = 0;
+            boostAmount = 100;
+            boostActive = false;
+            
+            // Clear existing police cars except first one
+            while (policeCars.length > 1) {
+                const car = policeCars.pop();
+                if (car && car.parent) {
+                    scene.remove(car);
+                }
+            }
+            
+            // Reset player car
+            resetPlayerCar();
+            
+            // Reset civilian cars
+            civilianCars.forEach(car => {
+                if (car && car.parent) {
+                    scene.remove(car);
+                }
+            });
+            civilianCars = [];
+            createCivilianCars(DIFFICULTY_SETTINGS[difficulty].civilianCarCount);
+            
+            // Update UI
+            updateUI();
+            
+            // Show game started message
+            showMessage("Game Started! Police pressure will increase over time.");
+            
+            console.log("Game started successfully!");
+        }
+        
+        // Restart the game
+        function restartGame() {
+            console.log("Restarting game...");
+            
+            // Hide game over screen
+            const gameOverScreen = document.getElementById('game-over');
+            if (gameOverScreen) {
+                gameOverScreen.style.display = 'none';
+            }
+            
+            // Show start screen
+            const startScreen = document.getElementById('start-screen');
+            if (startScreen) {
+                startScreen.style.display = 'flex';
+            }
+            
+            console.log("Game restarted");
+        }
+        
+        // Reset player car position
+        function resetPlayerCar() {
+            if (!playerCar) return;
+            
+            playerCar.position.set(0, 1, 0);
+            playerCar.rotation.set(0, 0, 0);
+            playerCar.velocity.set(0, 0, 0);
+            playerCar.speed = 0;
+            
+            // Small health penalty for resetting
+            playerHealth = Math.max(0, playerHealth - 10);
+            
+            showMessage("Car reset! -10% health");
+        }
+        
+        // Switch camera view
+        function switchCamera() {
+            if (cameraMode === 'chase') {
+                cameraMode = 'orbit';
+                showMessage("Camera: Orbit View");
+            } else if (cameraMode === 'orbit') {
+                cameraMode = 'first-person';
+                showMessage("Camera: First-Person View");
+            } else {
+                cameraMode = 'chase';
+                showMessage("Camera: Chase View");
+            }
+        }
+        
+        // Update game logic
+        function update(deltaTime) {
+            if (!gameActive) return;
+            
+            // Update game time
+            gameTime += deltaTime;
+            
+            // Increase police pressure over time
+            policePressure = 1 + Math.floor(gameTime / 30);
+            
+            // Update police spawn timer
+            policeSpawnTimer += deltaTime;
+            const spawnInterval = DIFFICULTY_SETTINGS[difficulty].policeSpawnRate / policePressure;
+            
+            if (policeSpawnTimer > spawnInterval && policeCars.length < 10 + policePressure) {
+                createPoliceCar();
+                policeSpawnTimer = 0;
+                showMessage("Police reinforcement arrived!");
+            }
+            
+            // Update player car based on key states
+            updatePlayerCar(deltaTime);
+            
+            // Update police cars AI
+            updatePoliceCars(deltaTime);
+            
+            // Update civilian cars
+            updateCivilianCars(deltaTime);
+            
+            // Update camera
+            updateCamera(deltaTime);
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Update boost
+            updateBoost(deltaTime);
+
+            // Update boost particles
+            updateBoostParticles(deltaTime);
+
+            // Update UI
+            updateUI();
+            
+            // Check game over conditions
+            checkGameOver();
+        }
+        
+        // Update player car movement
+        function updatePlayerCar(deltaTime) {
+            if (!playerCar) return;
+
+            // Update control states from keys and touch controls
+            playerCar.accelerating = keys['w'] || keys['arrowup'] || touchControls.up;
+            playerCar.braking = keys['s'] || keys['arrowdown'] || touchControls.down || touchControls.brake;
+            playerCar.turningLeft = keys['a'] || keys['arrowleft'] || touchControls.left;
+            playerCar.turningRight = keys['d'] || keys['arrowright'] || touchControls.right;
+            playerCar.handbrake = keys[' '];
+            
+            // Apply acceleration
+            if (playerCar.accelerating) {
+                playerCar.speed = Math.min(playerCar.maxSpeed * (boostActive ? 1.5 : 1), playerCar.speed + playerCar.acceleration);
+            } else if (playerCar.braking) {
+                playerCar.speed = Math.max(-playerCar.maxSpeed * 0.5, playerCar.speed - playerCar.braking);
+            } else {
+                // Natural deceleration
+                playerCar.speed *= 0.98;
+                if (Math.abs(playerCar.speed) < 0.01) playerCar.speed = 0;
+            }
+            
+            // Apply turning
+            if (playerCar.turningLeft) {
+                playerCar.rotation.y += playerCar.turning * (playerCar.speed / playerCar.maxSpeed);
+            }
+            if (playerCar.turningRight) {
+                playerCar.rotation.y -= playerCar.turning * (playerCar.speed / playerCar.maxSpeed);
+            }
+            
+            // Apply handbrake
+            if (playerCar.handbrake) {
+                playerCar.speed *= 0.9;
+                // Skid effect
+                playerCar.rotation.y += (Math.random() - 0.5) * 0.1;
+            }
+            
+            // Calculate velocity based on rotation
+            playerCar.velocity.x = -Math.sin(playerCar.rotation.y) * playerCar.speed;
+            playerCar.velocity.z = -Math.cos(playerCar.rotation.y) * playerCar.speed;
+            
+            // Update position
+            playerCar.position.x += playerCar.velocity.x;
+            playerCar.position.z += playerCar.velocity.z;
+            
+            // Keep car on ground
+            playerCar.position.y = 1;
+            
+            // Boundary check
+            const boundary = 250;
+            if (Math.abs(playerCar.position.x) > boundary) {
+                playerCar.position.x = Math.sign(playerCar.position.x) * boundary;
+                playerCar.speed *= 0.5; // Bounce effect
+            }
+            if (Math.abs(playerCar.position.z) > boundary) {
+                playerCar.position.z = Math.sign(playerCar.position.z) * boundary;
+                playerCar.speed *= 0.5; // Bounce effect
+            }
+        }
+        
+        // Update police cars AI
+        function updatePoliceCars(deltaTime) {
+            policeCars.forEach((policeCar, index) => {
+                if (!policeCar || !playerCar) return;
+                
+                // Calculate direction to player
+                const direction = new THREE.Vector3();
+                direction.subVectors(playerCar.position, policeCar.position).normalize();
+                
+                // Calculate angle to player
+                const angleToPlayer = Math.atan2(direction.x, direction.z);
+                const angleDifference = angleToPlayer - policeCar.rotation.y;
+                
+                // Turn toward player
+                policeCar.rotation.y += Math.sin(angleDifference) * policeCar.turning;
+                
+                // Accelerate toward player
+                const distanceToPlayer = policeCar.position.distanceTo(playerCar.position);
+                if (distanceToPlayer > 10) {
+                    policeCar.speed = Math.min(policeCar.maxSpeed, policeCar.speed + policeCar.acceleration);
+                } else {
+                    // Slow down when close
+                    policeCar.speed *= 0.95;
+                }
+                
+                // Calculate velocity
+                policeCar.velocity.x = -Math.sin(policeCar.rotation.y) * policeCar.speed;
+                policeCar.velocity.z = -Math.cos(policeCar.rotation.y) * policeCar.speed;
+                
+                // Update position
+                policeCar.position.x += policeCar.velocity.x;
+                policeCar.position.z += policeCar.velocity.z;
+                
+                // Keep car on ground
+                policeCar.position.y = 1;
+                
+                // Make light bar flash
+                const lightBar = policeCar.children[2];
+                if (lightBar && lightBar.material) {
+                    lightBar.material.emissiveIntensity = 0.5 + Math.sin(gameTime * 10) * 0.5;
+                }
+            });
+        }
+        
+        // Update civilian cars
+        function updateCivilianCars(deltaTime) {
+            civilianCars.forEach(car => {
+                if (!car) return;
+                
+                // Wander behavior
+                car.wanderTimer += deltaTime;
+                if (car.wanderTimer > 3) {
+                    car.direction = new THREE.Vector3(
+                        Math.random() - 0.5,
+                        0,
+                        Math.random() - 0.5
+                    ).normalize();
+                    car.wanderTimer = 0;
+                }
+                
+                // Move car
+                car.position.x += car.direction.x * car.speed;
+                car.position.z += car.direction.z * car.speed;
+                
+                // Rotate car to face direction
+                car.rotation.y = Math.atan2(car.direction.x, car.direction.z);
+                
+                // Boundary check - bounce off boundaries
+                const boundary = 250;
+                if (Math.abs(car.position.x) > boundary) {
+                    car.direction.x *= -1;
+                    car.position.x = Math.sign(car.position.x) * boundary;
+                }
+                if (Math.abs(car.position.z) > boundary) {
+                    car.direction.z *= -1;
+                    car.position.z = Math.sign(car.position.z) * boundary;
+                }
+                
+                // Avoid other cars
+                civilianCars.forEach(otherCar => {
+                    if (otherCar !== car) {
+                        const distance = car.position.distanceTo(otherCar.position);
+                        if (distance < 10) {
+                            const avoidDirection = new THREE.Vector3()
+                                .subVectors(car.position, otherCar.position)
+                                .normalize()
+                                .multiplyScalar(0.1);
+                            car.direction.add(avoidDirection).normalize();
+                        }
+                    }
+                });
+            });
+        }
+        
+        // Update camera based on current mode
+        function updateCamera(deltaTime) {
+            if (!playerCar) return;
+            
+            if (cameraMode === 'chase') {
+                // Chase camera behind player
+                const chaseDistance = 15;
+                const chaseHeight = 8;
+                
+                const targetPosition = new THREE.Vector3(
+                    playerCar.position.x + Math.sin(playerCar.rotation.y) * chaseDistance,
+                    playerCar.position.y + chaseHeight,
+                    playerCar.position.z + Math.cos(playerCar.rotation.y) * chaseDistance
+                );
+                
+                camera.position.lerp(targetPosition, 0.1);
+                camera.lookAt(playerCar.position.x, playerCar.position.y + 2, playerCar.position.z);
+            } else if (cameraMode === 'orbit') {
+                // Orbit camera that follows but can be controlled
+                camera.position.x = playerCar.position.x + 20;
+                camera.position.y = playerCar.position.y + 15;
+                camera.position.z = playerCar.position.z + 20;
+                camera.lookAt(playerCar.position);
+            } else if (cameraMode === 'first-person') {
+                // First-person camera from driver's seat
+                camera.position.set(
+                    playerCar.position.x,
+                    playerCar.position.y + 1.5,
+                    playerCar.position.z
+                );
+                camera.rotation.y = playerCar.rotation.y;
+                camera.rotation.x = -0.1; // Look slightly down
+            }
+        }
+        
+        // Update boost meter
+        function updateBoost(deltaTime) {
+            if (boostActive && boostAmount > 0) {
+                boostAmount -= 30 * deltaTime;
+                if (boostAmount < 0) {
+                    boostAmount = 0;
+                    boostActive = false;
+                    showMessage("Boost depleted!");
+                }
+            } else if (!boostActive && boostAmount < 100) {
+                boostAmount += DIFFICULTY_SETTINGS[difficulty].boostRecharge * 10 * deltaTime;
+                if (boostAmount > 100) boostAmount = 100;
+            }
+        }
+        
+        // Check collisions
+        function checkCollisions() {
+            if (!playerCar) return;
+            
+            // Check collision with police cars
+            policeCars.forEach((policeCar, index) => {
+                if (!policeCar) return;
+                
+                const distance = playerCar.position.distanceTo(policeCar.position);
+                if (distance < 4) {
+                    // Collision occurred
+                    playerHealth -= 5;
+                    policeCar.speed *= 0.5; // Police car slows down
+                    
+                    // Push player car away
+                    const pushDirection = new THREE.Vector3()
+                        .subVectors(playerCar.position, policeCar.position)
+                        .normalize();
+                    playerCar.position.add(pushDirection.multiplyScalar(2));
+                    
+                    showMessage("Collision with police! -5% health");
+                }
+            });
+            
+            // Check collision with civilian cars
+            civilianCars.forEach(civilianCar => {
+                if (!civilianCar) return;
+                
+                const distance = playerCar.position.distanceTo(civilianCar.position);
+                if (distance < 3) {
+                    // Collision occurred
+                    playerHealth -= 3;
+                    civilianCar.speed *= 0.3; // Civilian car slows down
+                    
+                    // Push civilian car away
+                    const pushDirection = new THREE.Vector3()
+                        .subVectors(civilianCar.position, playerCar.position)
+                        .normalize();
+                    civilianCar.position.add(pushDirection.multiplyScalar(3));
+                    
+                    showMessage("Collision with civilian car! -3% health");
+                }
+            });
+            
+            // Check collision with buildings
+            city.buildings.forEach(building => {
+                if (!building) return;
+                
+                // Simple distance check (simplified for performance)
+                const distance = playerCar.position.distanceTo(building.position);
+                if (distance < 15) {
+                    // More precise check using bounding boxes
+                    const buildingBox = new THREE.Box3().setFromObject(building);
+                    const playerBox = new THREE.Box3().setFromObject(playerCar);
+                    
+                    if (buildingBox.intersectsBox(playerBox)) {
+                        // Collision with building
+                        playerHealth -= 10;
+                        
+                        // Push player car away from building
+                        const pushDirection = new THREE.Vector3()
+                            .subVectors(playerCar.position, building.position)
+                            .normalize();
+                        playerCar.position.add(pushDirection.multiplyScalar(5));
+                        playerCar.speed *= 0.3;
+                        
+                        showMessage("Crashed into building! -10% health");
+                    }
+                }
+            });
+            
+            // Keep health in bounds
+            playerHealth = Math.max(0, Math.min(100, playerHealth));
+        }
+        
+        // Check game over conditions
+        function checkGameOver() {
+            if (playerHealth <= 0) {
+                endGame("destroyed");
+                return;
+            }
+            
+            // Check if surrounded by police (too many nearby)
+            let nearbyPolice = 0;
+            policeCars.forEach(policeCar => {
+                if (policeCar && playerCar.position.distanceTo(policeCar.position) < 10) {
+                    nearbyPolice++;
+                }
+            });
+            
+            if (nearbyPolice >= 5) {
+                endGame("surrounded");
+                return;
+            }
+        }
+        
+        // End the game
+        function endGame(reason) {
+            gameActive = false;
+            
+            const finalTime = formatTime(gameTime);
+            const policeEvaded = policeCars.length;
+            const maxPressure = getPressureLevel(policePressure);
+            
+            document.getElementById('final-time').textContent = finalTime;
+            document.getElementById('police-evaded').textContent = policeEvaded;
+            document.getElementById('max-pressure').textContent = maxPressure;
+            
+            let message = "";
+            if (reason === "destroyed") {
+                message = "Your car was destroyed!";
+            } else if (reason === "surrounded") {
+                message = "You were surrounded by police!";
+            }
+            
+            document.getElementById('result-message').textContent = message;
+            document.getElementById('game-over').style.display = 'block';
+            
+            console.log(`Game Over: ${message}`);
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            // Update time
+            document.getElementById('time-value').textContent = formatTime(gameTime);
+            
+            // Update police pressure
+            document.getElementById('pressure-value').textContent = getPressureLevel(policePressure);
+            
+            // Update police count
+            document.getElementById('police-count').textContent = policeCars.length;
+            
+            // Update speed (convert to km/h)
+            const speedKmh = Math.abs(playerCar ? playerCar.speed : 0) * 100;
+            document.getElementById('speed-value').textContent = `${Math.round(speedKmh)} km/h`;
+            
+            // Update health
+            document.getElementById('health-value').textContent = `${Math.round(playerHealth)}%`;
+            
+            // Update time progress bar
+            const timeProgress = Math.min(100, (gameTime / 300) * 100); // 5 minute max
+            document.getElementById('time-progress').style.width = `${timeProgress}%`;
+        }
+        
+        // Format time as MM:SS
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // Get pressure level as text
+        function getPressureLevel(pressure) {
+            if (pressure < 3) return "Low";
+            if (pressure < 6) return "Medium";
+            if (pressure < 9) return "High";
+            return "Extreme";
+        }
+        
+        // Show temporary message
+        function showMessage(text) {
+            const messageEl = document.getElementById('message');
+            if (!messageEl) return;
+            
+            messageEl.textContent = text;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 3000);
+            
+            console.log(`Message: ${text}`);
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Main animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = Math.min(0.05, clock.getDelta()) * gameSpeed;
+            
+            if (gameActive) {
+                update(deltaTime);
+            }
+            
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Initialize the game when page loads
+        window.addEventListener('load', function() {
+            console.log("Page loaded, initializing game...");
+            try {
+                init();
+                console.log("Game initialized successfully!");
+            } catch (error) {
+                console.error("Error initializing game:", error);
+                alert("Error initializing game. Please check console for details.");
+            }
+        });
+    </script>
+</body>
+</html>
